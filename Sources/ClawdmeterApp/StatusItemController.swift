@@ -11,6 +11,7 @@ final class StatusItemController {
         var orange = true
         var title = NSAttributedString()
         var tooltip = ""
+        var spoken = ""
     }
 
     private let model: AppModel
@@ -102,7 +103,7 @@ final class StatusItemController {
     private func scheduleStaleRefresh() {
         staleTimer?.invalidate()
         staleTimer = nil
-        guard model.showLimit, let limits = model.limits, !limits.isStale() else { return }
+        guard model.showLimit, let limits = model.currentLimits, !limits.isStale() else { return }
         let fireAt = limits.updatedAt.addingTimeInterval(RateLimits.staleAfter + 1)
         let timer = Timer(fire: fireAt, interval: 0, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.render() }
@@ -119,7 +120,8 @@ final class StatusItemController {
             animate: model.animate,
             orange: model.orangeIcon,
             title: title(),
-            tooltip: tooltip()
+            tooltip: tooltip(),
+            spoken: spokenSummary()
         )
         guard appearance != rendered, let button = item.button else { return }
         let old = rendered
@@ -127,6 +129,10 @@ final class StatusItemController {
         // Only touch what changed: a title change re-lays out the whole status item.
         if old?.title != appearance.title { button.attributedTitle = appearance.title }
         if old?.tooltip != appearance.tooltip { button.toolTip = appearance.tooltip }
+        if old?.spoken != appearance.spoken {
+            button.setAccessibilityLabel("Clawdmeter")
+            button.setAccessibilityValue(appearance.spoken)
+        }
         if old?.mood != appearance.mood || old?.sweating != appearance.sweating || old?.animate != appearance.animate
             || old?.orange != appearance.orange || old?.title != appearance.title {
             restartAnimation()
@@ -189,13 +195,24 @@ final class StatusItemController {
         if model.showCount, model.sessions.count > 1 {
             append("\(model.sessions.count)")
         }
-        if model.showLimit, let limits = model.limits, let headline = limits.headline {
+        if model.showLimit, let limits = model.currentLimits, let headline = limits.headline {
             let used = headline.window.usedPercentage
             let color: NSColor = limits.isStale() ? .tertiaryLabelColor
                 : used >= 90 ? .systemRed : used >= 70 ? .systemOrange : .labelColor
             append("\(headline.label) \(Int(used.rounded(.down)))%", color: color)
         }
         return result
+    }
+
+    /// What VoiceOver reads for the menu bar item, since the icon and short title carry no words.
+    private func spokenSummary() -> String {
+        var parts = [tooltip()]
+        if model.sessions.count > 1 { parts.append("\(model.sessions.count) sessions") }
+        if let limits = model.currentLimits, let headline = limits.headline {
+            let name = headline.label == "wk" ? "Weekly" : "5-hour"
+            parts.append("\(name) limit \(Int(headline.window.usedPercentage.rounded(.down)))% used")
+        }
+        return parts.joined(separator: ". ")
     }
 
     private func tooltip() -> String {

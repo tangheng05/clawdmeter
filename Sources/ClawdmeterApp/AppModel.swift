@@ -14,6 +14,14 @@ final class AppModel {
     private(set) var installError: String?
     private(set) var dailyUsage: [UsageHistory.Day] = []
     private(set) var celebrating = false
+    /// Bumped when a limit window resets, so time-based views refresh.
+    private var resetTick = 0
+
+    /// Limits as they stand now: windows past their reset read as 0%.
+    var currentLimits: RateLimits? {
+        _ = resetTick
+        return limits?.current()
+    }
 
     var showCount: Bool { didSet { defaults.set(showCount, forKey: "showCount") } }
     var showLimit: Bool { didSet { defaults.set(showLimit, forKey: "showLimit") } }
@@ -44,7 +52,8 @@ final class AppModel {
     }
 
     var sweating: Bool {
-        guard let limits, !limits.isStale(), let used = limits.headline?.window.usedPercentage else { return false }
+        guard let limits = currentLimits, !limits.isStale(), let used = limits.headline?.window.usedPercentage
+        else { return false }
         return used >= 90
     }
 
@@ -65,15 +74,17 @@ final class AppModel {
     @ObservationIgnored private let defaults = UserDefaults.standard
     @ObservationIgnored private var directoryWatcher: DirectoryWatcher?
     @ObservationIgnored private var processWatcher: ProcessWatcher?
-    @ObservationIgnored private let notifier = Notifier()
+    @ObservationIgnored let notifier = Notifier()
     @ObservationIgnored private var loaded = false
     @ObservationIgnored private var memory = SessionMemory()
     @ObservationIgnored private let alertLog = AlertLog()
     @ObservationIgnored private var celebrationEnd: DispatchWorkItem?
+    @ObservationIgnored private var resetTimer: Timer?
     @ObservationIgnored private lazy var history = UsageHistory(file: paths.appDir.appending(path: "history.json"))
 
     init() {
-        defaults.register(defaults: ["showCount": true, "showLimit": true, "animate": true, "orangeIcon": true,
+        defaults.register(defaults: ["showCount": true, "showLimit": true, "orangeIcon": true,
+                                     "animate": !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
                                      "notifyFinished": true, "notifyWaiting": true, "notifyLimits": true,
                                      "notifySound": true])
         showCount = defaults.bool(forKey: "showCount")
@@ -96,6 +107,11 @@ final class AppModel {
             install()
         }
         installer?.refreshHelperIfNeeded()
+        // A menu bar app is only useful if it's there after a restart.
+        if !defaults.bool(forKey: "didSetLaunchAtLogin") {
+            defaults.set(true, forKey: "didSetLaunchAtLogin")
+            launchAtLogin = true
+        }
         notifier.requestPermission()
         notifier.onOpen = { [weak self] id in
             guard let session = self?.sessions.first(where: { $0.id == id }) else { return }
@@ -112,13 +128,13 @@ final class AppModel {
 
     func reload() {
         let next = SessionMerger.merge(native: NativeSessionReader.read(paths), hooks: HookStateReader.read(paths),
-                                       isAlive: isProcessAlive)
+                                       isAlive: isSessionProcess)
         let nextLimits = LimitsReader.read(paths)
         var events: [AppEvent] = []
         let sessionEvents = memory.advance(to: next, isAlive: isProcessAlive)
         if loaded { events += sessionEvents }
         var fired = alertLog.load()
-        events += EventDetector.limitEvents(old: loaded ? limits : nil, new: nextLimits, fired: &fired)
+        events += EventDetector.limitEvents(new: nextLimits, fired: &fired)
         alertLog.save(fired)
         loaded = true
 
@@ -134,6 +150,7 @@ final class AppModel {
             }
         }
         processWatcher?.watch(Set(next.map(\.pid)))
+        scheduleResetRefresh()
         events.forEach(handle)
     }
 
@@ -144,6 +161,8 @@ final class AppModel {
         // Earlier versions offered a fixed choice.
         switch defaults.string(forKey: "shortcut") {
         case "off": return nil
+        case "optionCommandC":
+            return KeyCombo(keyCode: 8, key: "c", command: true, option: true, control: false, shift: false)
         case "controlOptionCommandC":
             return KeyCombo(keyCode: 8, key: "c", command: true, option: true, control: true, shift: false)
         default: return .default
@@ -175,6 +194,21 @@ final class AppModel {
         notifier.post(event, sessionId: id, sound: notifySound)
     }
 
+    /// One-shot timer at the next reset, so the meters drop and the reset notice arrives on time.
+    private func scheduleResetRefresh() {
+        resetTimer?.invalidate()
+        guard let reset = limits?.nextReset() else { return }
+        let timer = Timer(fire: reset.addingTimeInterval(1), interval: 0, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.resetTick += 1
+                self?.reload()
+            }
+        }
+        timer.tolerance = 30
+        RunLoop.main.add(timer, forMode: .common)
+        resetTimer = timer
+    }
+
     private func celebrate() {
         celebrationEnd?.cancel()
         celebrating = true
@@ -185,7 +219,7 @@ final class AppModel {
 
     func install() {
         guard let installer = makeInstaller() else {
-            installError = "Helper binary missing from the app bundle."
+            installError = "Clawdmeter's files are incomplete. Reinstall it from github.com/tangheng05/clawdmeter."
             return
         }
         do {

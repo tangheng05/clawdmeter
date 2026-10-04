@@ -2,14 +2,17 @@ import Foundation
 
 public enum SessionMerger {
     /// Native records are authoritative for state; hooks add the running tool and fill gaps.
+    /// `isAlive` also gets a time the process must have existed by, to catch reused PIDs.
     public static func merge(native: [NativeSessionRecord], hooks: [HookRecord],
-                             isAlive: (Int32) -> Bool) -> [Session] {
-        var hooksById = Dictionary(hooks.map { ($0.sessionId, $0) }, uniquingKeysWith: { $0.at > $1.at ? $0 : $1 })
+                             isAlive: (Int32, Date?) -> Bool) -> [Session] {
+        let hooksById = Dictionary(hooks.map { ($0.sessionId, $0) }, uniquingKeysWith: { $0.at > $1.at ? $0 : $1 })
+        var joined = Set<String>()
         var sessions: [Session] = []
 
-        for record in native where isAlive(record.pid) {
+        for record in native where isAlive(record.pid, record.statusChangedAt) {
             let id = record.sessionId ?? "pid-\(record.pid)"
-            let hook = hooksById.removeValue(forKey: id)
+            let hook = hooksById[id]
+            joined.insert(id)
             let state = record.state ?? hook?.state ?? .idle
             let since = record.state == nil ? (hook?.at ?? record.statusChangedAt) : record.statusChangedAt
             sessions.append(Session(
@@ -20,8 +23,8 @@ public enum SessionMerger {
             ))
         }
 
-        for hook in hooksById.values {
-            guard let pid = hook.pid, isAlive(pid) else { continue }
+        for hook in hooksById.values where !joined.contains(hook.sessionId) {
+            guard let pid = hook.pid, isAlive(pid, hook.at) else { continue }
             sessions.append(Session(
                 id: hook.sessionId, pid: pid, cwd: hook.cwd ?? "", name: nil, state: hook.state, since: hook.at,
                 tool: hook.state == .working ? runningTool(hook) : nil

@@ -1,3 +1,4 @@
+import ClawdmeterCore
 import CoreServices
 import Foundation
 
@@ -66,4 +67,11 @@ final class ProcessWatcher {
 
 func isProcessAlive(_ pid: Int32) -> Bool {
     pid > 0 && (kill(pid, 0) == 0 || errno == EPERM)
+}
+
+/// Alive, and already running by `seen`; a later start means the PID was reused by another program.
+func isSessionProcess(_ pid: Int32, seen: Date?) -> Bool {
+    guard isProcessAlive(pid) else { return false }
+    guard let seen, let started = ProcessTree.startTime(pid) else { return true }
+    return started <= seen.addingTimeInterval(5)
 }

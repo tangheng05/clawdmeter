@@ -10,7 +10,8 @@ public struct KeyCombo: Codable, Equatable, Sendable {
     public let control: Bool
     public let shift: Bool
 
-    public static let `default` = KeyCombo(keyCode: 8, key: "c", command: true, option: true, control: false, shift: false)
+    /// ⌃⌥⌘C: ⌥⌘C alone is Finder's "Copy as Pathname".
+    public static let `default` = KeyCombo(keyCode: 8, key: "c", command: true, option: true, control: true, shift: false)
 
     public init(keyCode: UInt32, key: String, command: Bool, option: Bool, control: Bool, shift: Bool) {
         self.keyCode = keyCode

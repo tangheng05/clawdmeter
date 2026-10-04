@@ -1,5 +1,6 @@
 import AppKit
 import ClawdmeterCore
+import ServiceManagement
 import SwiftUI
 
 /// While Settings is open the app acts like a regular app (Dock icon, ⌘-Tab), because
@@ -30,10 +31,12 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
 
 struct SettingsView: View {
     @Bindable var model: AppModel
+    @State private var notificationsBlocked = false
+    @State private var loginNeedsApproval = false
 
     var body: some View {
         Form {
-            Section("General") {
+            Section {
                 Toggle("Launch at login", isOn: $model.launchAtLogin)
                 Toggle("Show usage in the menu bar", isOn: $model.showLimit)
                 Toggle("Show session count in the menu bar", isOn: $model.showCount)
@@ -42,13 +45,36 @@ struct SettingsView: View {
                     Text("Orange").tag(true)
                     Text("Match the menu bar").tag(false)
                 }
+            } header: {
+                Text("General")
+            } footer: {
+                if loginNeedsApproval {
+                    HStack {
+                        Text("Allow Clawdmeter in Login Items so it starts with your Mac.")
+                        Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
+                    }
+                }
             }
 
-            Section("Notify me when") {
+            Section {
                 Toggle("A task finishes", isOn: $model.notifyFinished)
                 Toggle("A session needs me", isOn: $model.notifyWaiting)
                 Toggle("A limit gets close or resets", isOn: $model.notifyLimits)
                 Toggle("Play a sound", isOn: $model.notifySound)
+            } header: {
+                Text("Notify me when")
+            } footer: {
+                if notificationsBlocked {
+                    HStack {
+                        Text("Notifications are turned off for Clawdmeter in System Settings.")
+                        Button("Open") {
+                            let id = Bundle.main.bundleIdentifier ?? ""
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(id)") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                    }
+                }
             }
 
             Section {
@@ -98,8 +124,18 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .task { await refreshSystemState() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await refreshSystemState() }
+        }
         // Fits a 13-inch screen; the form scrolls if it needs more room.
         .frame(width: 440, height: 620)
+    }
+
+    /// Re-read when Settings appears or you come back from System Settings.
+    private func refreshSystemState() async {
+        notificationsBlocked = await model.notifier.isBlocked()
+        loginNeedsApproval = SMAppService.mainApp.status == .requiresApproval
     }
 
     @ViewBuilder private var updateStatus: some View {
@@ -108,9 +144,12 @@ struct SettingsView: View {
         case .upToDate: Text("You're on the latest version.")
         case .installing: Text("Updating…")
         case .failed(let message): Text(message).foregroundStyle(.red)
+        case .checkFailed(let message): Text(message)
         case .idle:
             if let version = model.updater.available?.version {
-                Text("Version \(version) is available. Open Clawdmeter from the menu bar to update.")
+                Text(model.updater.viaHomebrew
+                     ? "Version \(version) is available. Run brew upgrade clawdmeter in Terminal."
+                     : "Version \(version) is available. Click Clawd in the menu bar, then Update.")
             }
         }
     }
@@ -137,6 +176,7 @@ private struct ShortcutRecorder: View {
                 }
                 .buttonStyle(.borderless)
                 .help("Turn off the shortcut")
+                .accessibilityLabel("Turn off the shortcut")
             }
         }
         .onDisappear(perform: stop)

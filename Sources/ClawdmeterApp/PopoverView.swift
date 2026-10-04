@@ -8,7 +8,7 @@ struct PopoverView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
-            LimitsSection(limits: model.limits, dailyUsage: model.dailyUsage)
+            LimitsSection(limits: model.currentLimits, dailyUsage: model.dailyUsage)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
             Divider()
@@ -52,10 +52,11 @@ struct PopoverView: View {
             Button {
                 model.openSettings?()
             } label: {
-                Image(systemName: "gearshape")
+                Label("Settings", systemImage: "gearshape").labelStyle(.iconOnly)
             }
             .buttonStyle(.borderless)
-            .help("Settings")
+            .keyboardShortcut(",")
+            .help("Settings (⌘,)")
             Spacer()
             Button("Quit") { NSApp.terminate(nil) }
                 .buttonStyle(.borderless)
@@ -94,7 +95,7 @@ private struct LimitsSection: View {
             }
             .opacity(limits.isStale() ? 0.6 : 1)
         } else {
-            Text("Usage limits show up after your next Claude Code message.")
+            Text("Usage limits show up after your next Claude Code message. They're only available when you sign in with a Claude subscription.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -206,7 +207,7 @@ private struct SessionRow: View {
         Button(action: action) { content }
             .buttonStyle(.plain)
             .onHover { hovering = $0 }
-            .help("Open \(session.cwd)")
+            .help("Go to this session")
     }
 
     private var content: some View {
@@ -261,6 +262,7 @@ private struct SessionRow: View {
 
 private struct UpdateBanner: View {
     let updater: Updater
+    @State private var copied = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -280,17 +282,18 @@ private struct UpdateBanner: View {
         switch updater.status {
         case .checking: "Checking for updates…"
         case .upToDate: "You're on the latest version"
+        case .checkFailed: "Couldn't check for updates"
         case .installing: "Updating…"
-        case .failed: "Update didn't finish"
+        case .failed: "The update didn't finish"
         case .idle: "Version \(updater.available?.version ?? "") is available"
         }
     }
 
     private var detail: String? {
         switch updater.status {
-        case .failed(let message): message
+        case .failed(let message), .checkFailed(let message): message
         case .upToDate: "Clawdmeter \(updater.currentVersion)"
-        case .idle where updater.viaHomebrew: "Run brew upgrade clawdmeter"
+        case .idle where updater.viaHomebrew: "Run brew upgrade clawdmeter in Terminal"
         case .idle: "You have \(updater.currentVersion)"
         default: nil
         }
@@ -305,16 +308,27 @@ private struct UpdateBanner: View {
         switch updater.status {
         case .installing, .checking:
             ProgressView().controlSize(.small)
-        case .idle where updater.available != nil && updater.viaHomebrew:
-            Button("Copy") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString("brew upgrade clawdmeter", forType: .string)
+        case .idle where updater.available != nil:
+            HStack(spacing: 6) {
+                Button("What's new") { updater.openReleasePage() }
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 11))
+                if updater.viaHomebrew {
+                    Button(copied ? "Copied" : "Copy") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString("brew upgrade clawdmeter", forType: .string)
+                        copied = true
+                    }
+                    .controlSize(.small)
+                } else {
+                    Button("Update") { Task { await updater.install() } }
+                        .controlSize(.small)
+                        .buttonStyle(.borderedProminent)
+                }
             }
-            .controlSize(.small)
-        case .idle where updater.available != nil, .failed where updater.available != nil:
-            Button("Update") { Task { await updater.install() } }
+        case .failed where updater.available != nil:
+            Button("Download") { updater.openReleasePage() }
                 .controlSize(.small)
-                .buttonStyle(.borderedProminent)
         default:
             EmptyView()
         }
@@ -355,7 +369,7 @@ private struct WeekChart: View {
         if dailyUsage.filter({ $0.amount > 0 }).count >= 2 {
             let peak = max(dailyUsage.map(\.amount).max() ?? 1, 1)
             VStack(alignment: .leading, spacing: 6) {
-            Text("Weekly usage by day").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+            Text("Last 7 days").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
             HStack(alignment: .bottom, spacing: 0) {
                 ForEach(Array(dailyUsage.enumerated()), id: \.offset) { index, day in
                     let today = index == dailyUsage.count - 1
@@ -370,6 +384,8 @@ private struct WeekChart: View {
                     }
                     .frame(maxWidth: .infinity)
                     .help("\(Int(day.amount.rounded()))% of the weekly limit")
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(day.date.formatted(.dateTime.weekday(.wide))), \(Int(day.amount.rounded()))% of the weekly limit")
                 }
             }
             }
@@ -393,6 +409,7 @@ private struct ClawdView: View {
             Image(nsImage: MenuBarIcon.image(frames[index % frames.count]))
                 .interpolation(.none)
                 .opacity(mood == .asleep ? 0.45 : 1)
+                .accessibilityHidden(true)
         }
     }
 }

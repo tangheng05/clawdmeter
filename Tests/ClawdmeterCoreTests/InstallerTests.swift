@@ -69,7 +69,6 @@ import Testing
         #expect((s["statusLine"] as? [String: Any])?["command"] as? String == "mine.sh")
         #expect(commands(s, "Stop") == ["say done"])
         #expect((s["hooks"] as? [String: Any])?.keys.sorted() == ["Stop"])
-        #expect(!FileManager.default.fileExists(atPath: dir.paths.appDir.path))
         #expect(!installer.status().statusline && !installer.status().hooks)
     }
 

@@ -8,6 +8,7 @@ import Observation
 final class Updater {
     enum Status: Equatable {
         case idle, checking, upToDate, installing
+        case checkFailed(String)
         case failed(String)
     }
 
@@ -60,17 +61,24 @@ final class Updater {
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200,
               let release = UpdateChecker.parseLatestRelease(data) else {
-            if manual { status = .failed("Couldn't reach GitHub. Try again later.") }
+            if manual { showBriefly(.checkFailed("Couldn't reach GitHub. Check your connection and try again.")) }
             return
         }
         available = UpdateChecker.isNewer(release.version, than: currentVersion) ? release : nil
-        if manual {
-            status = available == nil ? .upToDate : .idle
-            if available == nil {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
-                    if self?.status == .upToDate { self?.status = .idle }
-                }
-            }
+        if manual { available == nil ? showBriefly(.upToDate) : (status = .idle) }
+    }
+
+    /// Shows a passing message, then returns to idle unless something else happened meanwhile.
+    private func showBriefly(_ message: Status) {
+        status = message
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+            if self?.status == message { self?.status = .idle }
+        }
+    }
+
+    func openReleasePage() {
+        if let url = available?.pageURL ?? URL(string: "https://github.com/tangheng05/clawdmeter/releases/latest") {
+            NSWorkspace.shared.open(url)
         }
     }
 
@@ -87,8 +95,9 @@ final class Updater {
             guard UpdateChecker.verifyChecksum(zip, checksumFile: String(decoding: checksum, as: UTF8.self)) else {
                 throw UpdateError("The download didn't match its checksum, so it wasn't installed.")
             }
-            let newApp = try unpack(zip)
-            try swapAndRelaunch(with: newApp)
+            let unpacked = try unpack(zip)
+            defer { try? FileManager.default.removeItem(at: unpacked.deletingLastPathComponent()) }
+            try swapAndRelaunch(with: unpacked)
         } catch let error as UpdateError {
             status = .failed(error.message)
         } catch {
@@ -114,19 +123,28 @@ final class Updater {
         return app
     }
 
-    /// Replaces the running app once it has quit, keeping the old copy until the new one is in place.
-    private func swapAndRelaunch(with newApp: URL) throws {
+    /// Replaces the running app once it has quit. The new copy is staged next to the app so both
+    /// moves are same-volume renames, and the old copy is restored if anything fails.
+    private func swapAndRelaunch(with unpacked: URL) throws {
         let target = Bundle.main.bundleURL
+        let folder = target.deletingLastPathComponent()
         guard target.pathExtension == "app", Bundle.main.bundleIdentifier != nil else {
-            throw UpdateError("Updates only work for the installed app.")
+            throw UpdateError("Updates only work for the copy of Clawdmeter in Applications.")
         }
-        guard FileManager.default.isWritableFile(atPath: target.deletingLastPathComponent().path) else {
-            throw UpdateError("Can't write to \(target.deletingLastPathComponent().path). Run the install command instead.")
+        guard FileManager.default.isWritableFile(atPath: folder.path) else {
+            throw UpdateError("Can't replace the app in \(folder.path). Download the new version from GitHub instead.")
         }
+        let newApp = folder.appending(path: ".Clawdmeter-update.app")
+        let backup = folder.appending(path: ".Clawdmeter-old.app")
+        try? FileManager.default.removeItem(at: newApp)
+        try? FileManager.default.removeItem(at: backup)
+        try FileManager.default.moveItem(at: unpacked, to: newApp)
         let script = """
         while kill -0 "$PARENT" 2>/dev/null; do sleep 0.2; done
-        mv "$TARGET" "$BACKUP" || exit 1
-        if mv "$NEW" "$TARGET"; then rm -rf "$BACKUP"; else mv "$BACKUP" "$TARGET"; fi
+        if mv "$TARGET" "$BACKUP"; then
+            if mv "$NEW" "$TARGET"; then rm -rf "$BACKUP"; else rm -rf "$TARGET"; mv "$BACKUP" "$TARGET"; fi
+        fi
+        rm -rf "$NEW"
         xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null
         open "$TARGET"
         """
@@ -137,7 +155,7 @@ final class Updater {
             "PARENT": String(ProcessInfo.processInfo.processIdentifier),
             "TARGET": target.path,
             "NEW": newApp.path,
-            "BACKUP": newApp.deletingLastPathComponent().appending(path: "Clawdmeter-old.app").path,
+            "BACKUP": backup.path,
             "PATH": "/usr/bin:/bin",
         ]
         try process.run()

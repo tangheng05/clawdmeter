@@ -28,29 +28,27 @@ public enum EventDetector {
         return events
     }
 
-    /// `fired` remembers alerts per window (keyed by reset time) so they never repeat.
-    public static func limitEvents(old: RateLimits?, new: RateLimits?, fired: inout Set<String>) -> [AppEvent] {
+    /// `fired` remembers alerts per window (keyed by reset hour) so they never repeat, even
+    /// when stale limits are re-read long after the window ended.
+    public static func limitEvents(new: RateLimits?, now: Date = .now, fired: inout Set<String>) -> [AppEvent] {
         var events: [AppEvent] = []
-        let pairs: [(String, LimitWindow?, LimitWindow?)] = [
-            ("5-hour", old?.fiveHour, new?.fiveHour),
-            ("Weekly", old?.sevenDay, new?.sevenDay),
-        ]
-        for (label, before, after) in pairs {
-            guard let after else { continue }
-            // Keyed by the reset hour, so small drifts in the reported reset time don't re-alert.
-            let window = Int(((after.resetsAt?.timeIntervalSince1970 ?? 0) / 3600).rounded())
-            if let crossed = thresholds.first(where: { after.usedPercentage >= Double($0) }) {
-                let key = "\(label)-\(crossed)-\(window)"
-                if !fired.contains(key) {
-                    events.append(.limitCrossed(label: label, threshold: crossed))
-                    for t in thresholds where Double(t) <= after.usedPercentage {
-                        fired.insert("\(label)-\(t)-\(window)")
-                    }
+        for (label, window) in [("5-hour", new?.fiveHour), ("Weekly", new?.sevenDay)] {
+            guard let window, let reset = window.resetsAt else { continue }
+            let hour = Int((reset.timeIntervalSince1970 / 3600).rounded())
+            if reset <= now {
+                let key = "\(label)-reset-\(hour)"
+                if window.usedPercentage >= 80, !fired.contains(key) {
+                    events.append(.limitReset(label: label))
+                    fired.insert(key)
                 }
+                continue
             }
-            if let before, before.usedPercentage >= 80, after.usedPercentage < before.usedPercentage,
-               let oldReset = before.resetsAt, let newReset = after.resetsAt, newReset > oldReset.addingTimeInterval(60) {
-                events.append(.limitReset(label: label))
+            if let crossed = thresholds.first(where: { window.usedPercentage >= Double($0) }),
+               !fired.contains("\(label)-\(crossed)-\(hour)") {
+                events.append(.limitCrossed(label: label, threshold: crossed))
+                for t in thresholds where Double(t) <= window.usedPercentage {
+                    fired.insert("\(label)-\(t)-\(hour)")
+                }
             }
         }
         return events
@@ -58,11 +56,13 @@ public enum EventDetector {
 
     /// Whether an alert key can still match, i.e. its window hasn't reset yet.
     public static func isLive(alertKey: String, now: Date = .now) -> Bool {
-        guard let value = alertKey.split(separator: "-").last.flatMap({ Double($0) }) else { return false }
+        guard let value = alertKey.split(separator: "-").last.flatMap({ Double($0) }), value > 0 else { return false }
         // Older versions stored the reset time in seconds rather than hours.
         let resetsAt = value > 100_000_000 ? value : value * 3600
-        return value == 0 || resetsAt > now.timeIntervalSince1970 - 3600
+        // Kept for a week past the reset, since stale limits can be re-read for days.
+        return resetsAt > now.timeIntervalSince1970 - 8 * 86_400
     }
+
 }
 
 /// Last known state of each session, kept until its process exits, so a session that

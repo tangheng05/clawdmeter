@@ -124,8 +124,8 @@ import Testing
     }
 
     @Test func nativeOnly() {
-        let s = SessionMerger.merge(native: [native(1, "a", .working)], hooks: [], isAlive: { _ in true })
-        #expect(s.map(\.id) == ["a"])
+        let s = SessionMerger.merge(native: [native(1, "a", .working)], hooks: [], isAlive: { _, _ in true })
+        #expect(s.map(\.sessionId) == ["a"])
         #expect(s.first?.state == .working)
         #expect(s.first?.cwd == "/p/1")
     }
@@ -133,20 +133,20 @@ import Testing
     @Test func nativeStateWinsAndHookAddsTool() {
         let s = SessionMerger.merge(native: [native(1, "a", .working)],
                                     hooks: [hook("a", "PreToolUse", tool: "Bash", at: 1001)],
-                                    isAlive: { _ in true })
+                                    isAlive: { _, _ in true })
         #expect(s.first?.state == .working)
         #expect(s.first?.tool == "Bash")
     }
 
     @Test func toolHiddenWhenNotWorking() {
         let s = SessionMerger.merge(native: [native(1, "a", .idle)],
-                                    hooks: [hook("a", "PreToolUse", tool: "Bash")], isAlive: { _ in true })
+                                    hooks: [hook("a", "PreToolUse", tool: "Bash")], isAlive: { _, _ in true })
         #expect(s.first?.tool == nil)
     }
 
     @Test func hookFillsMissingNativeStatus() {
         let s = SessionMerger.merge(native: [native(1, "a", nil)],
-                                    hooks: [hook("a", "PermissionRequest", at: 1005)], isAlive: { _ in true })
+                                    hooks: [hook("a", "PermissionRequest", at: 1005)], isAlive: { _, _ in true })
         #expect(s.first?.state == .waiting)
         #expect(s.first?.since == Date(timeIntervalSince1970: 1005))
     }
@@ -155,15 +155,15 @@ import Testing
         let s = SessionMerger.merge(native: [],
                                     hooks: [hook("a", "UserPromptSubmit", pid: 7), hook("b", "Stop"),
                                             hook("c", "Stop", pid: 8)],
-                                    isAlive: { $0 == 7 })
-        #expect(s.map(\.id) == ["a"])
+                                    isAlive: { pid, _ in pid == 7 })
+        #expect(s.map(\.sessionId) == ["a"])
         #expect(s.first?.state == .working)
     }
 
     @Test func deadPidsDropped() {
         let s = SessionMerger.merge(native: [native(1, "a", .working), native(2, "b", .idle)], hooks: [],
-                                    isAlive: { $0 == 2 })
-        #expect(s.map(\.id) == ["b"])
+                                    isAlive: { pid, _ in pid == 2 })
+        #expect(s.map(\.sessionId) == ["b"])
     }
 
     @Test func onlyCustomNamesAreUsed() throws {
@@ -172,27 +172,27 @@ import Testing
                       to: "sessions/1.json")
         try dir.write(#"{"pid":2,"sessionId":"b","cwd":"/x/api","name":"Refactor","nameSource":"user"}"#,
                       to: "sessions/2.json")
-        let s = SessionMerger.merge(native: NativeSessionReader.read(dir.paths), hooks: [], isAlive: { _ in true })
+        let s = SessionMerger.merge(native: NativeSessionReader.read(dir.paths), hooks: [], isAlive: { _, _ in true })
         #expect(Set(s.map(\.displayName)) == ["app", "Refactor"])
     }
 
     @Test func missingSessionIdFallsBackToPid() {
-        let s = SessionMerger.merge(native: [native(3, nil, .idle)], hooks: [], isAlive: { _ in true })
-        #expect(s.first?.id == "pid-3")
+        let s = SessionMerger.merge(native: [native(3, nil, .idle)], hooks: [], isAlive: { _, _ in true })
+        #expect(s.first?.sessionId == "pid-3")
     }
 
     @Test func sortedByPriorityThenRecency() {
         let s = SessionMerger.merge(
             native: [native(1, "idle", .idle, at: 5000), native(2, "old", .working, at: 1000),
                      native(3, "new", .working, at: 2000), native(4, "wait", .waiting, waitingFor: "x")],
-            hooks: [], isAlive: { _ in true })
-        #expect(s.map(\.id) == ["wait", "new", "old", "idle"])
+            hooks: [], isAlive: { _, _ in true })
+        #expect(s.map(\.sessionId) == ["wait", "new", "old", "idle"])
     }
 
     @Test func aggregate() {
         #expect(Aggregate(sessions: []).state == .idle)
         let s = SessionMerger.merge(native: [native(1, "a", .working), native(2, "b", .waiting)], hooks: [],
-                                    isAlive: { _ in true })
+                                    isAlive: { _, _ in true })
         let agg = Aggregate(sessions: s)
         #expect(agg.state == .waiting)
         #expect(agg.count == 2)

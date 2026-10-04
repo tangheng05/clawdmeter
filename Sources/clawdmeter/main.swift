@@ -1,6 +1,9 @@
 import ClawdmeterCore
 import Foundation
 
+// A previous statusline command that exits without reading its input must not kill us.
+signal(SIGPIPE, SIG_IGN)
+
 let args = CommandLine.arguments
 let paths = ClaudePaths()
 var input: Data { FileHandle.standardInput.readDataToEndOfFile() }

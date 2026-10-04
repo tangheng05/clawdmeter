@@ -5,7 +5,8 @@ public enum InstallerError: Error, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .unreadableSettings(let reason): "Couldn't read ~/.claude/settings.json: \(reason)"
+        case .unreadableSettings(let reason):
+            "Couldn't read ~/.claude/settings.json (\(reason)). Fix or remove the file, then click Connect."
         }
     }
 }
@@ -34,6 +35,9 @@ public struct Installer: Sendable {
         self.helperSource = helperSource
     }
 
+    /// Dotfiles setups often symlink settings.json; edit the real file, not the link.
+    private var settingsFile: URL { paths.settingsFile.resolvingSymlinksInPath() }
+
     private var helperCommand: String { "\"\(paths.helperPath.path)\"" }
 
     private func isOurs(_ command: Any?) -> Bool {
@@ -41,9 +45,9 @@ public struct Installer: Sendable {
     }
 
     public func install() throws {
-        var settings = try readSettings()
+        let original = try readSettings()
+        var settings = original
         try installHelper()
-        try backup()
 
         var line = settings["statusLine"] as? [String: Any] ?? [:]
         if let existing = line["command"] as? String, !existing.isEmpty, !isOurs(existing) {
@@ -63,7 +67,7 @@ public struct Installer: Sendable {
             hooks[event] = groups
         }
         settings["hooks"] = hooks
-        try writeSettings(settings)
+        try writeSettings(settings, replacing: original)
     }
 
     /// Updates the copied helper after an app update; does nothing if the integration isn't installed.
@@ -77,8 +81,8 @@ public struct Installer: Sendable {
     }
 
     public func uninstall() throws {
-        var settings = try readSettings()
-        try backup()
+        let original = try readSettings()
+        var settings = original
 
         if var line = settings["statusLine"] as? [String: Any], isOurs(line["command"]) {
             let previous = (try? String(contentsOf: paths.previousStatuslineFile, encoding: .utf8))?
@@ -107,8 +111,11 @@ public struct Installer: Sendable {
             settings["hooks"] = hooks.isEmpty ? nil : hooks
         }
 
-        try writeSettings(settings)
-        try? FileManager.default.removeItem(at: paths.appDir)
+        try writeSettings(settings, replacing: original)
+        // The helper and usage history stay: open sessions still call the helper until restarted.
+        for file in [paths.hooksDir, paths.limitsFile, paths.previousStatuslineFile] {
+            try? FileManager.default.removeItem(at: file)
+        }
     }
 
     public func status() -> InstallStatus {
@@ -127,9 +134,9 @@ public struct Installer: Sendable {
     }
 
     private func readSettings() throws -> [String: Any] {
-        guard FileManager.default.fileExists(atPath: paths.settingsFile.path) else { return [:] }
+        guard FileManager.default.fileExists(atPath: settingsFile.path) else { return [:] }
         do {
-            let data = try Data(contentsOf: paths.settingsFile)
+            let data = try Data(contentsOf: settingsFile)
             if data.isEmpty { return [:] }
             guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 throw InstallerError.unreadableSettings("top level is not an object")
@@ -142,10 +149,17 @@ public struct Installer: Sendable {
         }
     }
 
-    private func writeSettings(_ settings: [String: Any]) throws {
+    /// Writes only when something changed, after a backup, keeping the file's permissions.
+    private func writeSettings(_ settings: [String: Any], replacing original: [String: Any]) throws {
+        guard !NSDictionary(dictionary: settings).isEqual(to: original) else { return }
+        let fm = FileManager.default
+        let target = settingsFile
+        let permissions = (try? fm.attributesOfItem(atPath: target.path))?[.posixPermissions]
+        try backup()
         let data = try JSONSerialization.data(withJSONObject: settings,
                                               options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-        try writeAtomically(data, to: paths.settingsFile)
+        try writeAtomically(data, to: target)
+        if let permissions { try? fm.setAttributes([.posixPermissions: permissions], ofItemAtPath: target.path) }
     }
 
     private func installHelper() throws {
@@ -159,11 +173,17 @@ public struct Installer: Sendable {
 
     private func backup() throws {
         let fm = FileManager.default
-        guard fm.fileExists(atPath: paths.settingsFile.path) else { return }
+        guard fm.fileExists(atPath: settingsFile.path) else { return }
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd-HHmmss"
-        let target = paths.claudeDir.appending(path: "settings.json.clawdmeter-backup-\(formatter.string(from: .now))")
+        let prefix = "settings.json.clawdmeter-backup-"
+        let target = paths.claudeDir.appending(path: prefix + formatter.string(from: .now))
         try? fm.removeItem(at: target)
-        try fm.copyItem(at: paths.settingsFile, to: target)
+        try fm.copyItem(at: settingsFile, to: target)
+        // Timestamps sort by name; keep the two newest.
+        let old = ((try? fm.contentsOfDirectory(atPath: paths.claudeDir.path)) ?? [])
+            .filter { $0.hasPrefix(prefix) }.sorted().dropLast(2)
+        for name in old { try? fm.removeItem(at: paths.claudeDir.appending(path: name)) }
     }
+
 }

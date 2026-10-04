@@ -19,8 +19,13 @@ enum Focuser {
     }
 
     static func focus(_ session: Session) {
-        guard let plan = plan(for: session) else { return }
-        execute(plan)
+        if let plan = plan(for: session) {
+            execute(plan)
+        } else if !session.cwd.isEmpty {
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: session.cwd)])
+        } else {
+            NSSound.beep()
+        }
     }
 
     private static func execute(_ plan: FocusPlan) {

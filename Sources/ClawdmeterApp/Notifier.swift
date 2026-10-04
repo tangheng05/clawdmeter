@@ -18,6 +18,11 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         center?.requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
+    func isBlocked() async -> Bool {
+        guard let center else { return false }
+        return await center.notificationSettings().authorizationStatus == .denied
+    }
+
     func post(_ event: AppEvent, sessionId: String? = nil, sound: Bool) {
         guard let center else { return }
         let content = UNMutableNotificationContent()
