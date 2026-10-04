@@ -33,6 +33,15 @@ curl -fsSL https://raw.githubusercontent.com/tangheng05/clawdmeter/main/install.
 That's it. An orange Clawd appears in your menu bar. Send a message in Claude Code and it starts tracking.
 
 <details>
+<summary>Using Homebrew?</summary>
+
+```sh
+brew install --cask tangheng05/tap/clawdmeter
+```
+
+</details>
+
+<details>
 <summary>Prefer to download it yourself?</summary>
 
 1. Download **Clawdmeter.zip** from the [latest release](https://github.com/tangheng05/clawdmeter/releases/latest).
@@ -64,13 +73,13 @@ Clawd costs your Mac almost nothing. The animations run in macOS's own animation
 
 ## The popover
 
-Click Clawd to see:
+Click Clawd, or press **⌥⌘C** from any app, to see:
 
 - **Both limits** with their reset times, and a forecast for each: on track, or when you'll run out at your current pace.
 - **Your week so far:** a bar for each day's share of the weekly limit.
 - **Every session** with its folder, git branch and what it's doing. **Click a session to jump to it.** Terminal and iTerm2 open the exact tab (macOS asks once for permission), tmux switches to the right pane, VS Code, Cursor and Zed open the project window, and other apps come to the front.
 
-The gear menu has the settings, including **Launch at login** so Clawdmeter is always there when you start your Mac.
+The gear menu has the settings, including **Launch at login** so Clawdmeter is always there when you start your Mac, and the **keyboard shortcut**. ⌥⌘C replaces Finder's "Copy as Pathname" while Clawdmeter runs, so you can switch it to ⌃⌥⌘C or turn it off.
 
 ## Notifications
 
@@ -88,7 +97,7 @@ The first time it opens, Clawdmeter connects itself to Claude Code by adding a s
 
 You'll notice a short line at the bottom of Claude Code showing your model, folder and usage. If you already had your own status line, it keeps working as before.
 
-Clawdmeter uses no Claude tokens and never goes online. Everything stays on your Mac.
+Clawdmeter uses no Claude tokens, and everything it tracks stays on your Mac. The only thing it does online is check GitHub once a day for a new version, which you can turn off in the gear menu.
 
 ## Troubleshooting
 
@@ -106,12 +115,16 @@ Clawdmeter uses no Claude tokens and never goes online. Everything stays on your
 
 ## Update
 
-Run the install command again.
+Clawdmeter checks for new versions once a day. When one is out, click **Update** in the popover and it installs and restarts itself. You can also use **Check for updates now** in the gear menu.
+
+Installed with Homebrew? Run `brew upgrade clawdmeter` instead.
 
 ## Uninstall
 
 1. Click Clawd, then the gear, then **Remove Claude Code integration**.
 2. Click **Quit**, and drag **Clawdmeter** from Applications to the Trash.
+
+With Homebrew, `brew uninstall --zap clawdmeter` does both steps.
 
 ## Build from source
 

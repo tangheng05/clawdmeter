@@ -24,6 +24,7 @@ final class StatusItemController {
     private var outsideClickMonitor: Any?
     private var lastClosed = Date.distantPast
     private var menuOpen = false
+    private let hotKey = HotKey()
 
     init(model: AppModel) {
         self.model = model
@@ -56,6 +57,10 @@ final class StatusItemController {
             }
         }
         model.closePopover = { [weak self] in self?.popover.performClose(nil) }
+        HotKey.action = { [weak self] in
+            NSApp.activate()
+            self?.toggle()
+        }
         appearanceObservation = item.button?.observe(\.effectiveAppearance) { [weak self] _, _ in
             MainActor.assumeIsolated { self?.restartAnimation() }
         }
@@ -71,7 +76,8 @@ final class StatusItemController {
     }
 
     private func update() {
-        _ = (model.installStatus, model.installError)
+        _ = (model.installStatus, model.installError, model.updater.available, model.updater.status)
+        hotKey.register(model.shortcut)
         scheduleStaleRefresh()
         render()
         if popover.isShown { DispatchQueue.main.async { self.fitPopover() } }

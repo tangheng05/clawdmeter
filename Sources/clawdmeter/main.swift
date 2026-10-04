@@ -3,7 +3,7 @@ import Foundation
 
 let args = CommandLine.arguments
 let paths = ClaudePaths()
-let input = FileHandle.standardInput.readDataToEndOfFile()
+var input: Data { FileHandle.standardInput.readDataToEndOfFile() }
 
 func runShell(_ command: String, stdin: Data) -> String? {
     let process = Process()
@@ -28,7 +28,15 @@ case "hook" where args.count >= 3:
 case "statusline":
     let line = StatuslineHandler.handle(input: input, paths: paths, runPrevious: runShell)
     FileHandle.standardOutput.write(Data(line.utf8))
+case "uninstall":
+    // Used by `brew uninstall --zap`: removes the hooks and status line before the files go.
+    do {
+        try Installer(paths: paths, helperSource: paths.helperPath).uninstall()
+    } catch {
+        FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
+        exit(1)
+    }
 default:
-    FileHandle.standardError.write(Data("usage: clawdmeter hook <event> | clawdmeter statusline\n".utf8))
+    FileHandle.standardError.write(Data("usage: clawdmeter hook <event> | statusline | uninstall\n".utf8))
 }
 exit(0)

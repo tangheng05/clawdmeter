@@ -23,6 +23,7 @@ final class AppModel {
     var notifyWaiting: Bool { didSet { defaults.set(notifyWaiting, forKey: "notifyWaiting") } }
     var notifyLimits: Bool { didSet { defaults.set(notifyLimits, forKey: "notifyLimits") } }
     var notifySound: Bool { didSet { defaults.set(notifySound, forKey: "notifySound") } }
+    var shortcut: Shortcut { didSet { defaults.set(shortcut.rawValue, forKey: "shortcut") } }
 
     var mood: Mood {
         if celebrating { return .done }
@@ -40,6 +41,7 @@ final class AppModel {
     }
 
     @ObservationIgnored var closePopover: (() -> Void)?
+    let updater = Updater()
 
     /// Stored so SwiftUI sees changes; the system setting is the source of truth.
     var launchAtLogin = SMAppService.mainApp.status == .enabled {
@@ -73,6 +75,7 @@ final class AppModel {
         notifyWaiting = defaults.bool(forKey: "notifyWaiting")
         notifyLimits = defaults.bool(forKey: "notifyLimits")
         notifySound = defaults.bool(forKey: "notifySound")
+        shortcut = Shortcut(rawValue: defaults.string(forKey: "shortcut") ?? "") ?? .optionCommandC
         installStatus = InstallStatus(statusline: false, hooks: false, nativeSessions: false)
     }
 
@@ -95,6 +98,7 @@ final class AppModel {
             self?.reload()
         }
         reload()
+        updater.start()
     }
 
     func reload() {

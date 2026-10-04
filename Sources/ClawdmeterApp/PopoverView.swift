@@ -17,6 +17,10 @@ struct PopoverView: View {
                 Divider()
                 SetupBanner(model: model)
             }
+            if model.updater.available != nil || model.updater.status != .idle {
+                Divider()
+                UpdateBanner(updater: model.updater)
+            }
             Divider()
             footer
         }
@@ -59,6 +63,12 @@ struct PopoverView: View {
                 }
                 Divider()
                 Toggle("Launch at login", isOn: $model.launchAtLogin)
+                Picker("Keyboard shortcut", selection: $model.shortcut) {
+                    ForEach(Shortcut.allCases) { Text($0.title).tag($0) }
+                }
+                Divider()
+                Toggle("Check for updates automatically", isOn: Bindable(model.updater).automatic)
+                Button("Check for updates now") { Task { await model.updater.check(manual: true) } }
                 Divider()
                 if model.installStatus.statusline || model.installStatus.hooks {
                     Button("Reinstall Claude Code integration") { model.install() }
@@ -272,6 +282,68 @@ private struct SessionRow: View {
         case .idle:
             Date.now.timeIntervalSince(session.since) >= 60
                 ? "Idle for \(elapsed(from: session.since, to: .now, coarse: true))" : "Idle"
+        }
+    }
+}
+
+private struct UpdateBanner: View {
+    let updater: Updater
+
+    var body: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 12, weight: .medium))
+                if let detail { Text(detail).font(.system(size: 11)).foregroundStyle(detailColor) }
+            }
+            Spacer(minLength: 8)
+            action
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    private var title: String {
+        switch updater.status {
+        case .checking: "Checking for updates…"
+        case .upToDate: "You're on the latest version"
+        case .installing: "Updating…"
+        case .failed: "Update didn't finish"
+        case .idle: "Version \(updater.available?.version ?? "") is available"
+        }
+    }
+
+    private var detail: String? {
+        switch updater.status {
+        case .failed(let message): message
+        case .upToDate: "Clawdmeter \(updater.currentVersion)"
+        case .idle where updater.viaHomebrew: "Run brew upgrade clawdmeter"
+        case .idle: "You have \(updater.currentVersion)"
+        default: nil
+        }
+    }
+
+    private var detailColor: Color {
+        if case .failed = updater.status { return .red }
+        return .secondary
+    }
+
+    @ViewBuilder private var action: some View {
+        switch updater.status {
+        case .installing, .checking:
+            ProgressView().controlSize(.small)
+        case .idle where updater.available != nil && updater.viaHomebrew:
+            Button("Copy") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString("brew upgrade clawdmeter", forType: .string)
+            }
+            .controlSize(.small)
+        case .idle where updater.available != nil, .failed where updater.available != nil:
+            Button("Update") { Task { await updater.install() } }
+                .controlSize(.small)
+                .buttonStyle(.borderedProminent)
+        default:
+            EmptyView()
         }
     }
 }

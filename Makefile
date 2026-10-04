@@ -23,6 +23,7 @@ install: app
 
 release: app
 	cd build && rm -f Clawdmeter.zip && ditto -c -k --keepParent Clawdmeter.app Clawdmeter.zip
+	cd build && LC_ALL=C shasum -a 256 Clawdmeter.zip > Clawdmeter.zip.sha256
 
 test:
 	swift test
