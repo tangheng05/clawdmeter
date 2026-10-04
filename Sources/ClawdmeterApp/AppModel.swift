@@ -112,7 +112,8 @@ final class AppModel {
             defaults.set(true, forKey: "didSetLaunchAtLogin")
             launchAtLogin = true
         }
-        notifier.requestPermission()
+        // New users are asked from the welcome screen instead, with context.
+        if defaults.bool(forKey: "didShowWelcome") { notifier.requestPermission() }
         notifier.onOpen = { [weak self] id in
             guard let session = self?.sessions.first(where: { $0.id == id }) else { return }
             Focuser.focus(session)

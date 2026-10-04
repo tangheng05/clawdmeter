@@ -3,32 +3,6 @@ import ClawdmeterCore
 import ServiceManagement
 import SwiftUI
 
-/// While Settings is open the app acts like a regular app (Dock icon, ⌘-Tab), because
-/// macOS often refuses to bring a menu-bar-only app's window to the front.
-@MainActor
-final class SettingsWindow: NSObject, NSWindowDelegate {
-    private var window: NSWindow?
-
-    func show(model: AppModel) {
-        if window == nil {
-            let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(model: model)))
-            window.title = "Clawdmeter Settings"
-            window.styleMask = [.titled, .closable]
-            window.isReleasedWhenClosed = false
-            window.delegate = self
-            window.center()
-            self.window = window
-        }
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate()
-        window?.makeKeyAndOrderFront(nil)
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
-    }
-}
-
 struct SettingsView: View {
     @Bindable var model: AppModel
     @State private var notificationsBlocked = false
@@ -45,15 +19,13 @@ struct SettingsView: View {
                     Text("Orange").tag(true)
                     Text("Match the menu bar").tag(false)
                 }
+                if loginNeedsApproval {
+                    NoticeRow(title: "Login item needs your approval",
+                              detail: "Allow Clawdmeter in Login Items so it starts with your Mac.",
+                              action: "Open Settings") { SMAppService.openSystemSettingsLoginItems() }
+                }
             } header: {
                 Text("General")
-            } footer: {
-                if loginNeedsApproval {
-                    HStack {
-                        Text("Allow Clawdmeter in Login Items so it starts with your Mac.")
-                        Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
-                    }
-                }
             }
 
             Section {
@@ -61,20 +33,13 @@ struct SettingsView: View {
                 Toggle("A session needs me", isOn: $model.notifyWaiting)
                 Toggle("A limit gets close or resets", isOn: $model.notifyLimits)
                 Toggle("Play a sound", isOn: $model.notifySound)
+                if notificationsBlocked {
+                    NoticeRow(title: "Notifications are off",
+                              detail: "Turn them on for Clawdmeter in System Settings.",
+                              action: "Open Settings", perform: openNotificationSettings)
+                }
             } header: {
                 Text("Notify me when")
-            } footer: {
-                if notificationsBlocked {
-                    HStack {
-                        Text("Notifications are turned off for Clawdmeter in System Settings.")
-                        Button("Open") {
-                            let id = Bundle.main.bundleIdentifier ?? ""
-                            if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(id)") {
-                                NSWorkspace.shared.open(url)
-                            }
-                        }
-                    }
-                }
             }
 
             Section {
@@ -130,6 +95,13 @@ struct SettingsView: View {
         }
         // Fits a 13-inch screen; the form scrolls if it needs more room.
         .frame(width: 440, height: 620)
+    }
+
+    private func openNotificationSettings() {
+        let id = Bundle.main.bundleIdentifier ?? ""
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(id)") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     /// Re-read when Settings appears or you come back from System Settings.
@@ -232,6 +204,29 @@ private struct ShortcutRecorder: View {
             let key = event.charactersIgnoringModifiers ?? ""
             return key.unicodeScalars.allSatisfy { $0.properties.isAlphabetic || $0.properties.numericType != nil
                 || CharacterSet.punctuationCharacters.contains($0) || CharacterSet.symbols.contains($0) } ? key : ""
+        }
+    }
+}
+
+/// A row that explains something blocking a feature, with the one action that fixes it.
+private struct NoticeRow: View {
+    let title: String
+    let detail: String
+    let action: String
+    let perform: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail).font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 12)
+            Button(action, action: perform)
         }
     }
 }

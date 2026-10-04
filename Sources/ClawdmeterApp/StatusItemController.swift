@@ -26,7 +26,8 @@ final class StatusItemController {
     private var lastClosed = Date.distantPast
     private var menuOpen = false
     private let hotKey = HotKey()
-    private let settingsWindow = SettingsWindow()
+    private var settingsWindow: AppWindow?
+    private var welcomeWindow: AppWindow?
 
     init(model: AppModel) {
         self.model = model
@@ -66,13 +67,32 @@ final class StatusItemController {
         }
         model.openSettings = { [weak self] in
             guard let self else { return }
-            settingsWindow.show(model: self.model)
+            if settingsWindow == nil {
+                settingsWindow = AppWindow(title: "Clawdmeter Settings") { SettingsView(model: self.model) }
+            }
+            settingsWindow?.show()
             popover.performClose(nil)
         }
         appearanceObservation = item.button?.observe(\.effectiveAppearance) { [weak self] _, _ in
             MainActor.assumeIsolated { self?.restartAnimation() }
         }
         observe()
+        if !UserDefaults.standard.bool(forKey: "didShowWelcome") {
+            DispatchQueue.main.async { self.showWelcome() }
+        }
+    }
+
+    private func showWelcome() {
+        let window = AppWindow(title: "Welcome to Clawdmeter", plainTitlebar: true) { [unowned self] in
+            WelcomeView(model: model) { [weak self] in
+                self?.welcomeWindow?.close()
+                // Show the real thing right where it lives.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { self?.toggle() }
+            }
+        }
+        window.onClose = { UserDefaults.standard.set(true, forKey: "didShowWelcome") }
+        welcomeWindow = window
+        window.show()
     }
 
     private func observe() {

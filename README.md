@@ -30,7 +30,7 @@ Open **Terminal**, paste this line, and press Return:
 curl -fsSL https://raw.githubusercontent.com/tangheng05/clawdmeter/main/install.sh | sh
 ```
 
-That's it. An orange Clawd appears in your menu bar. Send a message in Claude Code and it starts tracking.
+That's it. An orange Clawd appears in your menu bar, and a short welcome screen helps you turn on notifications and opening at login. Send a message in Claude Code and it starts tracking.
 
 <details>
 <summary>Using Homebrew?</summary>
