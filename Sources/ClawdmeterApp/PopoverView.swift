@@ -139,7 +139,10 @@ private struct Meter: View {
                     Text(resetText(now: context.date))
                         .font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
                     forecastText(now: context.date)
+                        .help("Estimate based on your average pace since this window started")
                 }
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -349,11 +352,8 @@ private struct ClawdView: View {
     }
 }
 
-/// "today 4:00 PM", "tomorrow 9:30 AM", or "Wed 6:24 PM".
+/// "today 4:00 PM" or "Mon 9:30 AM"; short enough to fit a meter column.
 func dayAndTime(_ date: Date) -> String {
-    let calendar = Calendar.current
-    let day = calendar.isDateInToday(date) ? "today"
-        : calendar.isDateInTomorrow(date) ? "tomorrow"
-        : date.formatted(.dateTime.weekday(.abbreviated))
+    let day = Calendar.current.isDateInToday(date) ? "today" : date.formatted(.dateTime.weekday(.abbreviated))
     return "\(day) \(date.formatted(date: .omitted, time: .shortened))"
 }
