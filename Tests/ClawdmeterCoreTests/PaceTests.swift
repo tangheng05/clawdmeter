@@ -21,6 +21,13 @@ import Testing
         #expect(Pace.forecast(window(20, resetIn: 5), now: now) == .onTrack(projected: 70))
     }
 
+    @Test func fiveHourWindowForecastsAfterFortyFiveMinutes() {
+        let window = LimitWindow(usedPercentage: 30, resetsAt: now.addingTimeInterval(3 * 3600))
+        #expect(Pace.forecast(window, period: 5 * 3600, now: now) == .onTrack(projected: 75))
+        let early = LimitWindow(usedPercentage: 30, resetsAt: now.addingTimeInterval(4.5 * 3600))
+        #expect(Pace.forecast(early, period: 5 * 3600, now: now) == nil)
+    }
+
     @Test func tooEarlyOrTooLittleIsHidden() {
         #expect(Pace.forecast(window(30, resetIn: 6.9), now: now) == nil)
         #expect(Pace.forecast(window(3, resetIn: 4), now: now) == nil)

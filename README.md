@@ -47,8 +47,8 @@ Next to Clawd, `wk 86%` shows whichever limit is closest to running out (`5h` or
 
 Click Clawd to see:
 
-- **Both limits** with their reset times.
-- **Your week so far:** a bar for each day's usage, and whether you're on track or will run out before the reset.
+- **Both limits** with their reset times, and a forecast for each: on track, or when you'll run out at your current pace.
+- **Your week so far:** a bar for each day's share of the weekly limit.
 - **Every session** with its folder, git branch and what it's doing. **Click a session to jump to it.** Terminal and iTerm2 open the exact tab (macOS asks once for permission), tmux switches to the right pane, VS Code, Cursor and Zed open the project window, and other apps come to the front.
 
 The gear menu has the settings, including **Launch at login** so Clawdmeter is always there when you start your Mac.

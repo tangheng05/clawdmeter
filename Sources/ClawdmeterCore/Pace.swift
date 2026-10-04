@@ -13,7 +13,7 @@ public enum Pace {
         else { return nil }
         let start = reset.addingTimeInterval(-period)
         let elapsed = now.timeIntervalSince(start)
-        guard elapsed >= 6 * 3600 else { return nil }
+        guard elapsed >= min(6 * 3600, period * 0.15) else { return nil }
         let projected = window.usedPercentage * period / elapsed
         if projected >= 100 {
             return .hitsLimit(at: start.addingTimeInterval(elapsed * 100 / window.usedPercentage))

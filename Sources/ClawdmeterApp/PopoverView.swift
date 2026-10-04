@@ -100,10 +100,10 @@ private struct LimitsSection: View {
         if let limits {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top, spacing: 20) {
-                    Meter(title: "5-hour", window: limits.fiveHour, resetStyle: .countdown)
-                    Meter(title: "Weekly", window: limits.sevenDay, resetStyle: .clock)
+                    Meter(title: "5-hour", window: limits.fiveHour, resetStyle: .countdown, period: 5 * 3600)
+                    Meter(title: "Weekly", window: limits.sevenDay, resetStyle: .clock, period: 7 * 86_400)
                 }
-                PaceRow(window: limits.sevenDay, dailyUsage: dailyUsage)
+                WeekChart(dailyUsage: dailyUsage)
                 if limits.isStale() {
                     Text("Last updated \(limits.updatedAt.formatted(date: .omitted, time: .shortened))")
                         .font(.system(size: 11)).foregroundStyle(.tertiary)
@@ -124,6 +124,7 @@ private struct Meter: View {
     let title: String
     let window: LimitWindow?
     let resetStyle: ResetStyle
+    let period: TimeInterval
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -134,8 +135,11 @@ private struct Meter: View {
                 .contentTransition(.numericText())
             bar
             TimelineView(.periodic(from: .now, by: 60)) { context in
-                Text(resetText(now: context.date))
-                    .font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(resetText(now: context.date))
+                        .font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+                    forecastText(now: context.date)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -151,6 +155,20 @@ private struct Meter: View {
             }
         }
         .frame(height: 4)
+    }
+
+    @ViewBuilder
+    private func forecastText(now: Date) -> some View {
+        switch window.flatMap({ Pace.forecast($0, period: period, now: now) }) {
+        case .hitsLimit(let at):
+            Text("Runs out \(resetStyle == .countdown ? at.formatted(date: .omitted, time: .shortened) : dayAndTime(at))")
+                .font(.system(size: 11, weight: .medium)).foregroundStyle(.orange)
+        case .onTrack(let projected):
+            Text("On track for \(projected)% at reset")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+        case nil:
+            EmptyView()
+        }
     }
 
     private func resetText(now: Date) -> String {
@@ -281,53 +299,34 @@ func elapsed(from start: Date, to end: Date, coarse: Bool = false) -> String {
     return "\(seconds / 3600)h \(seconds % 3600 / 60)m"
 }
 
-/// Weekly usage per day plus a plain-language forecast for the weekly limit.
-private struct PaceRow: View {
-    let window: LimitWindow?
+/// Weekly-limit usage per day for the last week; hidden until there's history.
+private struct WeekChart: View {
     let dailyUsage: [UsageHistory.Day]
 
     var body: some View {
-        let hasHistory = dailyUsage.contains { $0.amount > 0 }
-        let forecast = window.flatMap { Pace.forecast($0) }
-        if hasHistory || forecast != nil {
-            HStack(alignment: .bottom, spacing: 14) {
-                if hasHistory { chart }
-                if let forecast { forecastText(forecast) }
-                Spacer(minLength: 0)
-            }
-            .padding(.top, 4)
-        }
-    }
-
-    private var chart: some View {
-        let peak = max(dailyUsage.map(\.amount).max() ?? 1, 1)
-        return HStack(alignment: .bottom, spacing: 4) {
-            ForEach(Array(dailyUsage.enumerated()), id: \.offset) { index, day in
-                VStack(spacing: 3) {
-                    RoundedRectangle(cornerRadius: 1.5)
-                        .fill(index == dailyUsage.count - 1 ? Color.primary.opacity(0.75) : Color.primary.opacity(0.28))
-                        .frame(width: 8, height: max(2, 24 * day.amount / peak))
-                        .frame(height: 24, alignment: .bottom)
-                    Text(day.date.formatted(.dateTime.weekday(.narrow)))
-                        .font(.system(size: 9)).foregroundStyle(.tertiary)
+        if dailyUsage.filter({ $0.amount > 0 }).count >= 2 {
+            let peak = max(dailyUsage.map(\.amount).max() ?? 1, 1)
+            VStack(alignment: .leading, spacing: 6) {
+            Text("Weekly usage by day").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+            HStack(alignment: .bottom, spacing: 0) {
+                ForEach(Array(dailyUsage.enumerated()), id: \.offset) { index, day in
+                    let today = index == dailyUsage.count - 1
+                    VStack(spacing: 4) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.primary.opacity(today ? 0.75 : 0.25))
+                            .frame(width: 16, height: max(2, 28 * day.amount / peak))
+                            .frame(height: 28, alignment: .bottom)
+                        Text(day.date.formatted(.dateTime.weekday(.abbreviated)))
+                            .font(.system(size: 9, weight: today ? .semibold : .regular))
+                            .foregroundStyle(today ? .secondary : .tertiary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .help("\(Int(day.amount.rounded()))% of the weekly limit")
                 }
-                .help("\(day.date.formatted(.dateTime.weekday(.wide))): \(Int(day.amount.rounded()))% of the weekly limit")
             }
-        }
-    }
-
-    private func forecastText(_ forecast: PaceForecast) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            switch forecast {
-            case .hitsLimit(let at):
-                Text("On pace to run out").foregroundStyle(.orange)
-                Text(dayAndTime(at)).foregroundStyle(.secondary)
-            case .onTrack(let projected):
-                Text("On track")
-                Text("About \(projected)% by reset").foregroundStyle(.secondary)
             }
+            .padding(.top, 8)
         }
-        .font(.system(size: 11, weight: .medium))
     }
 }
 
