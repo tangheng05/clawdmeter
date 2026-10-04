@@ -40,12 +40,6 @@ swift test     # core logic tests
 make app       # build build/Clawdmeter.app
 ```
 
-## Credits
-
-Inspired by [gmr/claude-status](https://github.com/gmr/claude-status) and [m1ckc3s/claude-status-bar](https://github.com/m1ckc3s/claude-status-bar).
-
-Unofficial and not affiliated with Anthropic. "Claude" is a trademark of Anthropic.
-
 ## License
 
 MIT
