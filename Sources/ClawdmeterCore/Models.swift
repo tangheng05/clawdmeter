@@ -18,6 +18,10 @@ public struct Session: Identifiable, Equatable, Sendable {
     public var tool: String?
     public var waitingFor: String?
     public var branch: String?
+    /// Percentage of the context window in use, when the status line has reported it.
+    public var contextUsed: Double?
+    /// Claude is compacting this session's context.
+    public var compacting = false
 
     public init(id: String, pid: Int32, cwd: String, name: String?, state: SessionState, since: Date,
                 tool: String? = nil, waitingFor: String? = nil, branch: String? = nil) {

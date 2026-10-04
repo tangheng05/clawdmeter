@@ -225,10 +225,15 @@ private struct SessionRow: View {
                 Text(detail).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 8)
-            if session.state != .idle {
-                TimelineView(.periodic(from: session.since, by: 1)) { context in
-                    Text(elapsed(from: session.since, to: context.date))
-                        .font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+            VStack(alignment: .trailing, spacing: 2) {
+                if session.state != .idle {
+                    TimelineView(.periodic(from: session.since, by: 1)) { context in
+                        Text(elapsed(from: session.since, to: context.date))
+                            .font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+                    }
+                }
+                if let used = session.contextUsed {
+                    ContextLabel(used: used)
                 }
             }
         }
@@ -252,6 +257,7 @@ private struct SessionRow: View {
         switch session.state {
         case .waiting:
             session.waitingFor.flatMap { $0 == "dialog open" ? nil : "Needs you: \($0)" } ?? "Needs you"
+        case .working where session.compacting: "Compacting context"
         case .working: session.tool.map { "Running \($0)" } ?? "Thinking"
         case .idle:
             Date.now.timeIntervalSince(session.since) >= 60
@@ -335,6 +341,20 @@ private struct UpdateBanner: View {
     }
 }
 
+/// How full the session's context window is; amber when Claude will compact soon.
+private struct ContextLabel: View {
+    let used: Double
+
+    var body: some View {
+        Text("\(Int(used.rounded()))% context")
+            .font(.system(size: 10).monospacedDigit())
+            .foregroundStyle(used >= 80 ? AnyShapeStyle(.orange) : AnyShapeStyle(.tertiary))
+            .fixedSize()
+            .help(used >= 80 ? "Context is nearly full, so Claude will compact it soon"
+                             : "How much of this session's context window is in use")
+    }
+}
+
 private struct SetupBanner: View {
     let model: AppModel
 
@@ -399,18 +419,19 @@ private struct ClawdView: View {
     let mood: Mood
     let sweating: Bool
     let animate: Bool
+    @State private var start = Date.now
 
     var body: some View {
         let animation = MenuBarIcon.animation(mood)
         let frames = animation.frames.map { sweating ? MenuBarIcon.withSweat($0) : $0 }
-        TimelineView(.periodic(from: .now, by: animation.frameDuration)) { context in
-            let tick = Int(context.date.timeIntervalSinceReferenceDate / animation.frameDuration)
-            let index = animate ? (animation.repeats ? tick % frames.count : min(tick, frames.count - 1)) : 0
-            Image(nsImage: MenuBarIcon.image(frames[index % frames.count]))
+        TimelineView(.periodic(from: start, by: animation.durations.min() ?? 0.25)) { context in
+            let index = animate ? animation.frame(at: context.date.timeIntervalSince(start)) : 0
+            Image(nsImage: MenuBarIcon.image(frames[index]))
                 .interpolation(.none)
                 .opacity(mood == .asleep ? 0.45 : 1)
                 .accessibilityHidden(true)
         }
+        .onChange(of: mood) { start = .now }
     }
 }
 

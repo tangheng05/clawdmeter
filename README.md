@@ -45,14 +45,16 @@ Clawd acts out what Claude is doing, so you can tell at a glance.
 
 <table>
   <tr>
-    <td align="center" width="33%"><img src="assets/moods/working.png" width="88" alt="Clawd scuttling"><br><b>Working</b><br>Scuttles while Claude works</td>
-    <td align="center" width="33%"><img src="assets/moods/waiting.png" width="88" alt="Clawd waving its claws"><br><b>Needs you</b><br>Waves, with a yellow dot</td>
-    <td align="center" width="33%"><img src="assets/moods/done.png" width="88" alt="Clawd hopping"><br><b>Done</b><br>Hops when a longer task ends</td>
+    <td align="center" width="25%"><img src="assets/moods/working.png" width="88" alt="Clawd scuttling"><br><b>Working</b><br>Scuttles</td>
+    <td align="center" width="25%"><img src="assets/moods/waiting.png" width="88" alt="Clawd waving its claws"><br><b>Needs you</b><br>Waves, with a yellow dot</td>
+    <td align="center" width="25%"><img src="assets/moods/compacting.png" width="88" alt="Clawd squishing"><br><b>Compacting</b><br>Squishes down</td>
+    <td align="center" width="25%"><img src="assets/moods/done.png" width="88" alt="Clawd hopping"><br><b>Done</b><br>Hops when a longer task ends</td>
   </tr>
   <tr>
-    <td align="center"><img src="assets/moods/idle.png" width="88" alt="Clawd dozing"><br><b>Idle</b><br>Dozes off</td>
+    <td align="center"><img src="assets/moods/idle.png" width="88" alt="Clawd blinking"><br><b>Idle</b><br>Blinks, ready to go</td>
     <td align="center"><img src="assets/moods/sweating.png" width="88" alt="Clawd sweating"><br><b>Near a limit</b><br>Sweats at 90%</td>
-    <td align="center"><img src="assets/moods/asleep.png" width="88" alt="Faded Clawd"><br><b>No sessions</b><br>Fades out</td>
+    <td align="center"><img src="assets/moods/asleep.png" width="88" alt="Clawd asleep"><br><b>No sessions</b><br>Falls asleep</td>
+    <td></td>
   </tr>
 </table>
 
@@ -61,7 +63,7 @@ Next to Clawd, `wk 86%` is the usage limit closest to running out. It turns ambe
 ## What you can do
 
 - **See your limits.** Click Clawd (or press **⌃⌥⌘C**) for your 5-hour and weekly usage, when each resets, and whether you're on pace to run out.
-- **Keep track of every session.** Each one shows its folder, branch and what Claude is doing. Click it to jump straight to its terminal or editor.
+- **Keep track of every session.** Each one shows its folder, branch, what Claude is doing and how full its context is. Click it to jump straight to its terminal or editor.
 - **Get notified** when a long task finishes, a session needs your answer, or a limit gets close.
 - **Make it yours** in Settings (the gear, or ⌘,): what shows in the menu bar, which notifications you get, and your own keyboard shortcut.
 

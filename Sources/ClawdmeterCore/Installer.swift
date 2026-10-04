@@ -25,7 +25,7 @@ public struct InstallStatus: Equatable, Sendable {
 
 public struct Installer: Sendable {
     public static let hookEvents = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
-                                    "PermissionRequest", "Stop", "SessionEnd"]
+                                    "PermissionRequest", "PreCompact", "Stop", "SessionEnd"]
 
     let paths: ClaudePaths
     let helperSource: URL
@@ -113,7 +113,7 @@ public struct Installer: Sendable {
 
         try writeSettings(settings, replacing: original)
         // The helper and usage history stay: open sessions still call the helper until restarted.
-        for file in [paths.hooksDir, paths.limitsFile, paths.previousStatuslineFile] {
+        for file in [paths.hooksDir, paths.limitsFile, paths.contextDir, paths.previousStatuslineFile] {
             try? FileManager.default.removeItem(at: file)
         }
     }

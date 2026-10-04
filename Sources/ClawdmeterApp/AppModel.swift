@@ -46,7 +46,7 @@ final class AppModel {
         if sessions.isEmpty { return .asleep }
         switch aggregate.state {
         case .waiting: return .waiting
-        case .working: return .working
+        case .working: return sessions.contains(where: \.compacting) ? .compacting : .working
         case .idle: return .idle
         }
     }
@@ -107,6 +107,8 @@ final class AppModel {
             install()
         }
         installer?.refreshHelperIfNeeded()
+        // Newer versions listen to more hook events; add them for people already connected.
+        if installStatus.statusline, !installStatus.hooks { install() }
         // A menu bar app is only useful if it's there after a restart.
         if !defaults.bool(forKey: "didSetLaunchAtLogin") {
             defaults.set(true, forKey: "didSetLaunchAtLogin")
@@ -129,7 +131,7 @@ final class AppModel {
 
     func reload() {
         let next = SessionMerger.merge(native: NativeSessionReader.read(paths), hooks: HookStateReader.read(paths),
-                                       isAlive: isSessionProcess)
+                                       context: ContextReader.read(paths), isAlive: isSessionProcess)
         let nextLimits = LimitsReader.read(paths)
         var events: [AppEvent] = []
         let sessionEvents = memory.advance(to: next, isAlive: isProcessAlive)
@@ -182,7 +184,10 @@ final class AppModel {
             if notifyFinished { notifyAboutSession(event, id: id) }
         case .needsYou(let id, _):
             if notifyWaiting { notifyAboutSession(event, id: id) }
-        case .limitCrossed, .limitReset:
+        case .limitReset:
+            celebrate(for: 2.4)
+            if notifyLimits { notifier.post(event, sound: notifySound) }
+        case .limitCrossed:
             if notifyLimits { notifier.post(event, sound: notifySound) }
         }
     }
@@ -210,12 +215,12 @@ final class AppModel {
         resetTimer = timer
     }
 
-    private func celebrate() {
+    private func celebrate(for duration: TimeInterval = 1.2) {
         celebrationEnd?.cancel()
         celebrating = true
         let end = DispatchWorkItem { [weak self] in self?.celebrating = false }
         celebrationEnd = end
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: end)
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: end)
     }
 
     func install() {

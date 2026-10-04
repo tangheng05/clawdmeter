@@ -190,7 +190,13 @@ final class StatusItemController {
             let keyframes = CAKeyframeAnimation(keyPath: "contents")
             keyframes.values = frames
             keyframes.calculationMode = .discrete
-            keyframes.duration = animation.frameDuration * Double(frames.count)
+            keyframes.duration = animation.total
+            // Each frame holds for its own time, e.g. a long open-eyes pause between blinks.
+            var start = 0.0
+            keyframes.keyTimes = animation.durations.map { duration in
+                defer { start += duration }
+                return NSNumber(value: start / animation.total)
+            }
             keyframes.repeatCount = animation.repeats ? .infinity : 1
             keyframes.isRemovedOnCompletion = false
             keyframes.fillMode = .forwards

@@ -45,7 +45,7 @@ public struct HookRecord: Codable, Equatable, Sendable {
     public var state: SessionState {
         switch event {
         case "PermissionRequest": .waiting
-        case "UserPromptSubmit", "PreToolUse", "PostToolUse": .working
+        case "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact": .working
         default: .idle
         }
     }

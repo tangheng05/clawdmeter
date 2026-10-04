@@ -152,16 +152,18 @@ private struct KeyCaps: View {
 private struct BigClawd: View {
     let mood: Mood
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private let cell: CGFloat = 9
+    @State private var start = Date.now
+    private let unit: CGFloat = 5
 
     var body: some View {
         let animation = MenuBarIcon.animation(mood)
+        let w = unit * MenuBarIcon.cell.width, h = unit * MenuBarIcon.cell.height
         // The hop plays, then holds for a beat before playing again.
-        let hold = animation.repeats ? 0 : 6
-        TimelineView(.periodic(from: .now, by: animation.frameDuration)) { context in
-            let tick = Int(context.date.timeIntervalSinceReferenceDate / animation.frameDuration)
-            let index = reduceMotion ? 0 : min(tick % (animation.frames.count + hold), animation.frames.count - 1)
-            VStack(spacing: cell * 0.5) {
+        let loop = animation.repeats ? animation.total : animation.total + 1.2
+        TimelineView(.periodic(from: start, by: animation.durations.min() ?? 0.25)) { context in
+            let elapsed = context.date.timeIntervalSince(start).truncatingRemainder(dividingBy: loop)
+            let index = reduceMotion ? 0 : animation.frame(at: elapsed)
+            VStack(spacing: h * 0.4) {
                 Canvas { context, _ in
                     for (y, row) in animation.frames[index].enumerated() {
                         for (x, char) in row.enumerated() {
@@ -172,19 +174,20 @@ private struct BigClawd: View {
                             default: nil
                             }
                             guard let color else { continue }
-                            context.fill(Path(CGRect(x: CGFloat(x) * cell, y: CGFloat(y) * cell, width: cell, height: cell)),
+                            context.fill(Path(CGRect(x: CGFloat(x) * w, y: CGFloat(y) * h, width: w, height: h)),
                                          with: .color(color))
                         }
                     }
                 }
-                .frame(width: cell * 11, height: cell * 8)
+                .frame(width: w * 22, height: h * 8)
                 // A pixel shadow grounds Clawd so the hop reads as a jump.
                 Rectangle()
                     .fill(Color.primary.opacity(0.08))
-                    .frame(width: cell * 7, height: cell * 0.6)
-                    .offset(x: -cell)
+                    .frame(width: w * 14, height: h * 0.3)
+                    .offset(x: -w * 2)
             }
         }
+        .onChange(of: mood) { start = .now }
         .accessibilityHidden(true)
     }
 }

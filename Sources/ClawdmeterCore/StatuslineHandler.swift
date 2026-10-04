@@ -11,12 +11,28 @@ public enum StatuslineHandler {
             try? writeAtomically(data, to: paths.limitsFile)
         }
 
+        if let rawId = json?["session_id"] as? String, let id = sanitizedSessionId(rawId),
+           let used = ((json?["context_window"] as? [String: Any])?["used_percentage"] as? NSNumber)?.doubleValue {
+            recordContext(used, sessionId: id, paths: paths)
+        }
+
         if let previous = try? String(contentsOf: paths.previousStatuslineFile, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines), !previous.isEmpty {
             return runPrevious(previous, input) ?? ""
         }
         guard let json else { return "" }
         return compactLine(json)
+    }
+
+    /// One small file per session, rewritten only when the percentage changes.
+    static func recordContext(_ used: Double, sessionId: String, paths: ClaudePaths) {
+        let file = paths.contextDir.appending(path: "\(sessionId).json")
+        if let data = try? Data(contentsOf: file),
+           let saved = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+           (saved["used"] as? NSNumber)?.doubleValue == used { return }
+        if let data = try? JSONSerialization.data(withJSONObject: ["used": used]) {
+            try? writeAtomically(data, to: file)
+        }
     }
 
     /// Skips rewriting identical limits for a minute; each write wakes the menu bar app.
