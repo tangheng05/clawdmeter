@@ -52,8 +52,7 @@ final class AppModel {
     }
 
     var sweating: Bool {
-        guard let limits = currentLimits, !limits.isStale(), let used = limits.headline?.window.usedPercentage
-        else { return false }
+        guard let used = currentLimits?.headline?.window.usedPercentage else { return false }
         return used >= 90
     }
 

@@ -19,7 +19,6 @@ final class StatusItemController {
     private let popover = NSPopover()
     private let hosting: NSHostingController<PopoverView>
     private var rendered: Appearance?
-    private var staleTimer: Timer?
     private var iconLayer: CALayer?
     private var appearanceObservation: NSKeyValueObservation?
     private var outsideClickMonitor: Any?
@@ -108,7 +107,6 @@ final class StatusItemController {
         let taken = !hotKey.register(model.shortcut)
         // Only write on change; every write re-triggers this observation.
         if model.shortcutTaken != taken { model.shortcutTaken = taken }
-        scheduleStaleRefresh()
         render()
         if popover.isShown { DispatchQueue.main.async { self.fitPopover() } }
     }
@@ -117,20 +115,6 @@ final class StatusItemController {
         guard !menuOpen else { return }
         let size = hosting.sizeThatFits(in: NSSize(width: 320, height: 10_000))
         if popover.contentSize != size { popover.contentSize = size }
-    }
-
-    /// One-shot timer at the moment limits go stale, instead of polling.
-    private func scheduleStaleRefresh() {
-        staleTimer?.invalidate()
-        staleTimer = nil
-        guard model.showLimit, let limits = model.currentLimits, !limits.isStale() else { return }
-        let fireAt = limits.updatedAt.addingTimeInterval(RateLimits.staleAfter + 1)
-        let timer = Timer(fire: fireAt, interval: 0, repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated { self?.render() }
-        }
-        timer.tolerance = 30
-        RunLoop.main.add(timer, forMode: .common)
-        staleTimer = timer
     }
 
     private func render() {
@@ -184,7 +168,7 @@ final class StatusItemController {
         layer.contentsGravity = .resizeAspect
         layer.magnificationFilter = .nearest
         layer.contents = frames.first
-        layer.opacity = state.mood == .asleep ? 0.45 : 1
+        layer.opacity = state.mood == .asleep ? 0.7 : 1
 
         if state.animate, frames.count > 1 {
             let keyframes = CAKeyframeAnimation(keyPath: "contents")
@@ -223,8 +207,8 @@ final class StatusItemController {
         }
         if model.showLimit, let limits = model.currentLimits, let headline = limits.headline {
             let used = headline.window.usedPercentage
-            let color: NSColor = limits.isStale() ? .tertiaryLabelColor
-                : used >= 90 ? .systemRed : used >= 70 ? .systemOrange : .labelColor
+            // Stays readable when idle: the number holds until the reset, which currentLimits handles.
+            let color: NSColor = used >= 90 ? .systemRed : used >= 70 ? .systemOrange : .labelColor
             append("\(headline.label) \(Int(used.rounded(.down)))%", color: color)
         }
         return result

@@ -434,7 +434,7 @@ private struct ClawdView: View {
             let index = animate ? animation.frame(at: context.date.timeIntervalSince(start)) : 0
             Image(nsImage: MenuBarIcon.image(frames[index]))
                 .interpolation(.none)
-                .opacity(mood == .asleep ? 0.45 : 1)
+                .opacity(mood == .asleep ? 0.7 : 1)
                 .accessibilityHidden(true)
         }
         .onChange(of: mood) { start = .now }
