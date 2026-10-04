@@ -21,6 +21,7 @@ final class StatusItemController {
     private var staleTimer: Timer?
     private var iconLayer: CALayer?
     private var appearanceObservation: NSKeyValueObservation?
+    private var outsideClickMonitor: Any?
 
     init(model: AppModel) {
         self.model = model
@@ -33,6 +34,10 @@ final class StatusItemController {
         item.button?.action = #selector(toggle)
         item.button?.imagePosition = .imageLeading
         item.button?.image = MenuBarIcon.blank
+        NotificationCenter.default.addObserver(forName: NSPopover.didCloseNotification, object: popover,
+                                               queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.stopWatchingOutsideClicks() }
+        }
         model.closePopover = { [weak self] in self?.popover.performClose(nil) }
         appearanceObservation = item.button?.observe(\.effectiveAppearance) { [weak self] _, _ in
             MainActor.assumeIsolated { self?.restartAnimation() }
@@ -177,6 +182,21 @@ final class StatusItemController {
             fitPopover()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
+            watchOutsideClicks()
         }
+    }
+
+    /// After the gear menu closes, the popover is no longer key and `.transient` stops
+    /// dismissing it, so clicks in other apps close it explicitly while it's open.
+    private func watchOutsideClicks() {
+        stopWatchingOutsideClicks()
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            MainActor.assumeIsolated { self?.popover.performClose(nil) }
+        }
+    }
+
+    private func stopWatchingOutsideClicks() {
+        if let monitor = outsideClickMonitor { NSEvent.removeMonitor(monitor) }
+        outsideClickMonitor = nil
     }
 }
