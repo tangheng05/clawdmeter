@@ -49,39 +49,12 @@ struct PopoverView: View {
 
     private var footer: some View {
         HStack {
-            Menu {
-                Toggle("Show session count", isOn: $model.showCount)
-                Toggle("Show usage in menu bar", isOn: $model.showLimit)
-                Toggle("Animate while working", isOn: $model.animate)
-                Toggle("Orange icon", isOn: $model.orangeIcon)
-                Divider()
-                Section("Notify me when") {
-                    Toggle("A task finishes", isOn: $model.notifyFinished)
-                    Toggle("A session needs me", isOn: $model.notifyWaiting)
-                    Toggle("A limit gets close or resets", isOn: $model.notifyLimits)
-                    Toggle("Play a sound", isOn: $model.notifySound)
-                }
-                Divider()
-                Toggle("Launch at login", isOn: $model.launchAtLogin)
-                Picker("Keyboard shortcut", selection: $model.shortcut) {
-                    ForEach(Shortcut.allCases) { Text($0.title).tag($0) }
-                }
-                Divider()
-                Toggle("Check for updates automatically", isOn: Bindable(model.updater).automatic)
-                Button("Check for updates now") { Task { await model.updater.check(manual: true) } }
-                Divider()
-                if model.installStatus.statusline || model.installStatus.hooks {
-                    Button("Reinstall Claude Code integration") { model.install() }
-                    Button("Remove Claude Code integration") { model.uninstall() }
-                } else {
-                    Button("Install Claude Code integration") { model.install() }
-                }
+            Button {
+                model.openSettings?()
             } label: {
                 Image(systemName: "gearshape")
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
+            .buttonStyle(.borderless)
             .help("Settings")
             Spacer()
             Button("Quit") { NSApp.terminate(nil) }

@@ -25,6 +25,7 @@ final class StatusItemController {
     private var lastClosed = Date.distantPast
     private var menuOpen = false
     private let hotKey = HotKey()
+    private let settingsWindow = SettingsWindow()
 
     init(model: AppModel) {
         self.model = model
@@ -58,8 +59,14 @@ final class StatusItemController {
         }
         model.closePopover = { [weak self] in self?.popover.performClose(nil) }
         HotKey.action = { [weak self] in
+            guard self?.model.recordingShortcut == false else { return }
             NSApp.activate()
             self?.toggle()
+        }
+        model.openSettings = { [weak self] in
+            guard let self else { return }
+            popover.performClose(nil)
+            settingsWindow.show(model: self.model)
         }
         appearanceObservation = item.button?.observe(\.effectiveAppearance) { [weak self] _, _ in
             MainActor.assumeIsolated { self?.restartAnimation() }
@@ -77,7 +84,9 @@ final class StatusItemController {
 
     private func update() {
         _ = (model.installStatus, model.installError, model.updater.available, model.updater.status)
-        hotKey.register(model.shortcut)
+        let taken = !hotKey.register(model.shortcut)
+        // Only write on change; every write re-triggers this observation.
+        if model.shortcutTaken != taken { model.shortcutTaken = taken }
         scheduleStaleRefresh()
         render()
         if popover.isShown { DispatchQueue.main.async { self.fitPopover() } }

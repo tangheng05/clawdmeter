@@ -23,7 +23,15 @@ final class AppModel {
     var notifyWaiting: Bool { didSet { defaults.set(notifyWaiting, forKey: "notifyWaiting") } }
     var notifyLimits: Bool { didSet { defaults.set(notifyLimits, forKey: "notifyLimits") } }
     var notifySound: Bool { didSet { defaults.set(notifySound, forKey: "notifySound") } }
-    var shortcut: Shortcut { didSet { defaults.set(shortcut.rawValue, forKey: "shortcut") } }
+    /// nil means the shortcut is turned off.
+    var shortcut: KeyCombo? {
+        didSet {
+            let stored = shortcut.flatMap { try? JSONEncoder().encode($0) }.map { String(decoding: $0, as: UTF8.self) }
+            defaults.set(stored ?? "off", forKey: "keyCombo")
+        }
+    }
+    var shortcutTaken = false
+    var recordingShortcut = false
 
     var mood: Mood {
         if celebrating { return .done }
@@ -41,6 +49,7 @@ final class AppModel {
     }
 
     @ObservationIgnored var closePopover: (() -> Void)?
+    @ObservationIgnored var openSettings: (() -> Void)?
     let updater = Updater()
 
     /// Stored so SwiftUI sees changes; the system setting is the source of truth.
@@ -75,7 +84,7 @@ final class AppModel {
         notifyWaiting = defaults.bool(forKey: "notifyWaiting")
         notifyLimits = defaults.bool(forKey: "notifyLimits")
         notifySound = defaults.bool(forKey: "notifySound")
-        shortcut = Shortcut(rawValue: defaults.string(forKey: "shortcut") ?? "") ?? .optionCommandC
+        shortcut = Self.loadShortcut(defaults)
         installStatus = InstallStatus(statusline: false, hooks: false, nativeSessions: false)
     }
 
@@ -126,6 +135,19 @@ final class AppModel {
         }
         processWatcher?.watch(Set(next.map(\.pid)))
         events.forEach(handle)
+    }
+
+    private static func loadShortcut(_ defaults: UserDefaults) -> KeyCombo? {
+        if let stored = defaults.string(forKey: "keyCombo") {
+            return stored == "off" ? nil : (try? JSONDecoder().decode(KeyCombo.self, from: Data(stored.utf8))) ?? .default
+        }
+        // Earlier versions offered a fixed choice.
+        switch defaults.string(forKey: "shortcut") {
+        case "off": return nil
+        case "controlOptionCommandC":
+            return KeyCombo(keyCode: 8, key: "c", command: true, option: true, control: true, shift: false)
+        default: return .default
+        }
     }
 
     func focus(_ session: Session) {

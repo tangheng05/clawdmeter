@@ -79,7 +79,7 @@ Click Clawd, or press **⌥⌘C** from any app, to see:
 - **Your week so far:** a bar for each day's share of the weekly limit.
 - **Every session** with its folder, git branch and what it's doing. **Click a session to jump to it.** Terminal and iTerm2 open the exact tab (macOS asks once for permission), tmux switches to the right pane, VS Code, Cursor and Zed open the project window, and other apps come to the front.
 
-The gear menu has the settings, including **Launch at login** so Clawdmeter is always there when you start your Mac, and the **keyboard shortcut**. ⌥⌘C replaces Finder's "Copy as Pathname" while Clawdmeter runs, so you can switch it to ⌃⌥⌘C or turn it off.
+Click the gear for **Settings**: launch at login, what shows in the menu bar, notifications, updates, and the **keyboard shortcut**. To change the shortcut, click it and press the keys you want. ⌥⌘C is also Finder's "Copy as Pathname", so pick another one if you use that.
 
 ## Notifications
 
@@ -89,7 +89,7 @@ Clawdmeter can tell you when:
 - a session needs your answer,
 - a limit reaches 80% or 95%, or resets after heavy use.
 
-It stays quiet when you're already looking at that session. Click a notification to jump to the session. Choose which ones you want, and whether they play a sound, from the gear menu.
+It stays quiet when you're already looking at that session. Click a notification to jump to the session. Choose which ones you want, and whether they play a sound, in Settings.
 
 ## What it changes on your Mac
 
@@ -97,7 +97,7 @@ The first time it opens, Clawdmeter connects itself to Claude Code by adding a s
 
 You'll notice a short line at the bottom of Claude Code showing your model, folder and usage. If you already had your own status line, it keeps working as before.
 
-Clawdmeter uses no Claude tokens, and everything it tracks stays on your Mac. The only thing it does online is check GitHub once a day for a new version, which you can turn off in the gear menu.
+Clawdmeter uses no Claude tokens, and everything it tracks stays on your Mac. The only thing it does online is check GitHub once a day for a new version, which you can turn off in Settings.
 
 ## Troubleshooting
 
@@ -115,13 +115,13 @@ Clawdmeter uses no Claude tokens, and everything it tracks stays on your Mac. Th
 
 ## Update
 
-Clawdmeter checks for new versions once a day. When one is out, click **Update** in the popover and it installs and restarts itself. You can also use **Check for updates now** in the gear menu.
+Clawdmeter checks for new versions once a day. When one is out, click **Update** in the popover and it installs and restarts itself. You can also click **Check now** in Settings.
 
 Installed with Homebrew? Run `brew upgrade clawdmeter` instead.
 
 ## Uninstall
 
-1. Click Clawd, then the gear, then **Remove Claude Code integration**.
+1. Click Clawd, then the gear, then **Disconnect** under Claude Code.
 2. Click **Quit**, and drag **Clawdmeter** from Applications to the Trash.
 
 With Homebrew, `brew uninstall --zap clawdmeter` does both steps.
