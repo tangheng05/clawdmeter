@@ -73,7 +73,7 @@ Next to Clawd, `wk 86%` is the usage limit closest to running out. It turns ambe
 - **Light.** Clawd uses close to 0% CPU, even while it moves.
 - **Updates itself.** When a new version is out, click **Update** in the popover. With Homebrew, run `brew upgrade clawdmeter`.
 - **Connects to Claude Code** by adding a status line and a few hooks to `~/.claude/settings.json`, after saving a backup. Your own status line keeps working.
-- **Usage limits** need a Claude subscription login, not an API key.
+- **Works in the terminal and in VS Code.** Usage limits refresh from terminal sessions, and they need a Claude subscription login, not an API key.
 
 <details>
 <summary>Something not working?</summary>

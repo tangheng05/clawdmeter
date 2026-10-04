@@ -3,7 +3,9 @@ import Foundation
 public enum SessionMerger {
     /// Native records are authoritative for state; hooks add the running tool and fill gaps.
     /// `isAlive` also gets a time the process must have existed by, to catch reused PIDs.
+    /// `context` comes from the status line; `transcript` is the fallback for sessions without one (e.g. VS Code).
     public static func merge(native: [NativeSessionRecord], hooks: [HookRecord], context: [String: Double] = [:],
+                             transcript: (String) -> TranscriptContext? = { _ in nil },
                              isAlive: (Int32, Date?) -> Bool) -> [Session] {
         let hooksById = Dictionary(hooks.map { ($0.sessionId, $0) }, uniquingKeysWith: { $0.at > $1.at ? $0 : $1 })
         var joined = Set<String>()
@@ -33,7 +35,12 @@ public enum SessionMerger {
 
         for i in sessions.indices {
             if !sessions[i].cwd.isEmpty { sessions[i].branch = GitBranch.current(in: sessions[i].cwd) }
-            sessions[i].contextUsed = context[sessions[i].sessionId]
+            if let used = context[sessions[i].sessionId] {
+                sessions[i].contextUsed = used
+            } else if let fallback = transcript(sessions[i].sessionId) {
+                sessions[i].contextUsed = fallback.percent
+                sessions[i].contextTokens = fallback.tokens
+            }
             // Compaction runs between PreCompact and the next hook event.
             sessions[i].compacting = sessions[i].state == .working
                 && hooksById[sessions[i].sessionId]?.event == "PreCompact"

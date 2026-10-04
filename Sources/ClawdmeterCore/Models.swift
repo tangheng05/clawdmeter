@@ -20,6 +20,8 @@ public struct Session: Identifiable, Equatable, Sendable {
     public var branch: String?
     /// Percentage of the context window in use, when the status line has reported it.
     public var contextUsed: Double?
+    /// Tokens in the context window, when only the conversation log is available.
+    public var contextTokens: Int?
     /// Claude is compacting this session's context.
     public var compacting = false
 

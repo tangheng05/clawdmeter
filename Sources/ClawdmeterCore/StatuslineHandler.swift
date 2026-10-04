@@ -15,6 +15,10 @@ public enum StatuslineHandler {
            let used = ((json?["context_window"] as? [String: Any])?["used_percentage"] as? NSNumber)?.doubleValue {
             recordContext(used, sessionId: id, paths: paths)
         }
+        if let model = (json?["model"] as? [String: Any])?["id"] as? String,
+           let size = ((json?["context_window"] as? [String: Any])?["context_window_size"] as? NSNumber)?.intValue {
+            ContextWindows.record(model: model, size: size, paths: paths)
+        }
 
         if let previous = try? String(contentsOf: paths.previousStatuslineFile, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines), !previous.isEmpty {

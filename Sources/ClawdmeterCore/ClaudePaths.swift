@@ -20,6 +20,8 @@ public struct ClaudePaths: Sendable {
     public var hooksDir: URL { appDir.appending(path: "hooks") }
     public var limitsFile: URL { appDir.appending(path: "limits.json") }
     public var contextDir: URL { appDir.appending(path: "context") }
+    public var windowsFile: URL { appDir.appending(path: "windows.json") }
+    public var projectsDir: URL { claudeDir.appending(path: "projects") }
     public var binDir: URL { appDir.appending(path: "bin") }
     public var helperPath: URL { binDir.appending(path: "clawdmeter") }
     public var previousStatuslineFile: URL { appDir.appending(path: "previous-statusline") }

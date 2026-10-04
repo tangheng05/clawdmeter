@@ -234,6 +234,12 @@ private struct SessionRow: View {
                 }
                 if let used = session.contextUsed {
                     ContextLabel(used: used)
+                } else if let tokens = session.contextTokens {
+                    Text("\(tokens >= 1000 ? "\(tokens / 1000)K" : "\(tokens)") tokens")
+                        .font(.system(size: 10).monospacedDigit())
+                        .foregroundStyle(.tertiary)
+                        .fixedSize()
+                        .help("Tokens in this session's context. The percentage appears once a terminal session reports this model's window size.")
                 }
             }
         }

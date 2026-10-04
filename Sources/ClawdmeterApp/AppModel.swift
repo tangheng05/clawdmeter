@@ -78,6 +78,7 @@ final class AppModel {
     @ObservationIgnored private var loaded = false
     @ObservationIgnored private var memory = SessionMemory()
     @ObservationIgnored private let alertLog = AlertLog()
+    @ObservationIgnored private lazy var transcripts = TranscriptCache(paths: paths)
     @ObservationIgnored private var celebrationEnd: DispatchWorkItem?
     @ObservationIgnored private var resetTimer: Timer?
     @ObservationIgnored private lazy var history = UsageHistory(file: paths.appDir.appending(path: "history.json"))
@@ -130,8 +131,11 @@ final class AppModel {
     }
 
     func reload() {
+        let windows = ContextWindows.load(paths)
         let next = SessionMerger.merge(native: NativeSessionReader.read(paths), hooks: HookStateReader.read(paths),
-                                       context: ContextReader.read(paths), isAlive: isSessionProcess)
+                                       context: ContextReader.read(paths),
+                                       transcript: { [transcripts] in transcripts.context(forSession: $0, windows: windows) },
+                                       isAlive: isSessionProcess)
         let nextLimits = LimitsReader.read(paths)
         var events: [AppEvent] = []
         let sessionEvents = memory.advance(to: next, isAlive: isProcessAlive)
