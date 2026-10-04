@@ -2,8 +2,10 @@ import AppKit
 import ClawdmeterCore
 import SwiftUI
 
+/// While Settings is open the app acts like a regular app (Dock icon, ⌘-Tab), because
+/// macOS often refuses to bring a menu-bar-only app's window to the front.
 @MainActor
-final class SettingsWindow {
+final class SettingsWindow: NSObject, NSWindowDelegate {
     private var window: NSWindow?
 
     func show(model: AppModel) {
@@ -12,11 +14,17 @@ final class SettingsWindow {
             window.title = "Clawdmeter Settings"
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
+            window.delegate = self
             window.center()
             self.window = window
         }
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory)
     }
 }
 

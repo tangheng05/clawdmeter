@@ -65,8 +65,8 @@ final class StatusItemController {
         }
         model.openSettings = { [weak self] in
             guard let self else { return }
-            popover.performClose(nil)
             settingsWindow.show(model: self.model)
+            popover.performClose(nil)
         }
         appearanceObservation = item.button?.observe(\.effectiveAppearance) { [weak self] _, _ in
             MainActor.assumeIsolated { self?.restartAnimation() }
@@ -216,6 +216,8 @@ final class StatusItemController {
             guard Date.now.timeIntervalSince(lastClosed) > 0.3 else { return }
             model.reload()
             fitPopover()
+            // Without this the first click inside the popover only activates the app.
+            NSApp.activate()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
             watchOutsideClicks()
