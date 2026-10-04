@@ -6,9 +6,15 @@ public enum StatuslineHandler {
                               runPrevious: (String, Data) -> String?) -> String {
         let json = (try? JSONSerialization.jsonObject(with: input)) as? [String: Any]
 
-        if let limits = json?["rate_limits"] as? [String: Any], needsWrite(limits, paths: paths, now: now),
-           let data = try? JSONSerialization.data(withJSONObject: ["ts": now.timeIntervalSince1970, "rate_limits": limits]) {
-            try? writeAtomically(data, to: paths.limitsFile)
+        if let limits = json?["rate_limits"] as? [String: Any] {
+            let account = Account.current(paths)
+            if needsWrite(limits, account: account, paths: paths, now: now) {
+                var saved: [String: Any] = ["ts": now.timeIntervalSince1970, "rate_limits": limits]
+                saved["account"] = account
+                if let data = try? JSONSerialization.data(withJSONObject: saved) {
+                    try? writeAtomically(data, to: paths.limitsFile)
+                }
+            }
         }
 
         if let rawId = json?["session_id"] as? String, let id = sanitizedSessionId(rawId),
@@ -40,12 +46,13 @@ public enum StatuslineHandler {
     }
 
     /// Skips rewriting identical limits for a minute; each write wakes the menu bar app.
-    static func needsWrite(_ limits: [String: Any], paths: ClaudePaths, now: Date) -> Bool {
+    static func needsWrite(_ limits: [String: Any], account: String?, paths: ClaudePaths, now: Date) -> Bool {
         guard let data = try? Data(contentsOf: paths.limitsFile),
               let saved = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let ts = saved["ts"] as? Double,
               let savedLimits = saved["rate_limits"] as? [String: Any] else { return true }
-        return now.timeIntervalSince1970 - ts >= 60 || !NSDictionary(dictionary: savedLimits).isEqual(to: limits)
+        return now.timeIntervalSince1970 - ts >= 60 || saved["account"] as? String != account
+            || !NSDictionary(dictionary: savedLimits).isEqual(to: limits)
     }
 
     static func compactLine(_ json: [String: Any]) -> String {

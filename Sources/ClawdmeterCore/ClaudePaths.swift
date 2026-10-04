@@ -25,6 +25,23 @@ public struct ClaudePaths: Sendable {
     public var binDir: URL { appDir.appending(path: "bin") }
     public var helperPath: URL { binDir.appending(path: "clawdmeter") }
     public var previousStatuslineFile: URL { appDir.appending(path: "previous-statusline") }
+
+    /// Claude Code keeps the signed-in account next to the default config dir, or inside a custom one.
+    public var accountFile: URL {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        return claudeDir.standardizedFileURL == home.appending(path: ".claude").standardizedFileURL
+            ? home.appending(path: ".claude.json")
+            : claudeDir.appending(path: ".claude.json")
+    }
+}
+
+public enum Account {
+    /// The signed-in Claude account, or nil when using an API key or signed out.
+    public static func current(_ paths: ClaudePaths) -> String? {
+        guard let data = try? Data(contentsOf: paths.accountFile),
+              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
+        return (json["oauthAccount"] as? [String: Any])?["accountUuid"] as? String
+    }
 }
 
 /// Session ids become file names, so keep only safe characters.

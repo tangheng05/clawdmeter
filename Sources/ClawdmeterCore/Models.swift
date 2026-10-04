@@ -62,11 +62,19 @@ public struct RateLimits: Equatable, Sendable {
     public let fiveHour: LimitWindow?
     public let sevenDay: LimitWindow?
     public let updatedAt: Date
+    /// The account these limits were reported for.
+    public let account: String?
 
-    public init(fiveHour: LimitWindow?, sevenDay: LimitWindow?, updatedAt: Date) {
+    public init(fiveHour: LimitWindow?, sevenDay: LimitWindow?, updatedAt: Date, account: String? = nil) {
         self.fiveHour = fiveHour
         self.sevenDay = sevenDay
         self.updatedAt = updatedAt
+        self.account = account
+    }
+
+    /// After switching accounts, the old account's limits must not be shown as the new one's.
+    public func belongs(to current: String?) -> Bool {
+        account == nil || current == nil || account == current
     }
 
     public func isStale(now: Date = .now) -> Bool {
@@ -79,7 +87,7 @@ public struct RateLimits: Equatable, Sendable {
             guard let window, let reset = window.resetsAt, reset <= now else { return window }
             return LimitWindow(usedPercentage: 0, resetsAt: nil)
         }
-        return RateLimits(fiveHour: fresh(fiveHour), sevenDay: fresh(sevenDay), updatedAt: updatedAt)
+        return RateLimits(fiveHour: fresh(fiveHour), sevenDay: fresh(sevenDay), updatedAt: updatedAt, account: account)
     }
 
     /// The earliest reset still ahead, so the app can refresh right when it happens.

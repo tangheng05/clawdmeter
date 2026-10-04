@@ -12,6 +12,7 @@ public enum LimitsReader {
         }
         let ts: Double
         let rate_limits: Limits?
+        let account: String?
     }
 
     public static func read(_ paths: ClaudePaths) -> RateLimits? {
@@ -21,7 +22,7 @@ public enum LimitsReader {
         let five = window(limits.five_hour)
         let seven = window(limits.seven_day)
         if five == nil, seven == nil { return nil }
-        return RateLimits(fiveHour: five, sevenDay: seven, updatedAt: dateFromEpoch(raw.ts))
+        return RateLimits(fiveHour: five, sevenDay: seven, updatedAt: dateFromEpoch(raw.ts), account: raw.account)
     }
 
     private static func window(_ w: Raw.Window?) -> LimitWindow? {

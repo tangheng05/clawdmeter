@@ -80,7 +80,9 @@ final class AppModel {
     @ObservationIgnored private lazy var transcripts = TranscriptCache(paths: paths)
     @ObservationIgnored private var celebrationEnd: DispatchWorkItem?
     @ObservationIgnored private var resetTimer: Timer?
-    @ObservationIgnored private lazy var history = UsageHistory(file: paths.appDir.appending(path: "history.json"))
+    @ObservationIgnored private lazy var history = UsageHistory(file: historyFile(for: nil))
+    @ObservationIgnored private var account: String?
+    @ObservationIgnored private var accountFileModified: Date?
 
     init() {
         defaults.register(defaults: ["showCount": true, "showLimit": true, "orangeIcon": true,
@@ -135,7 +137,9 @@ final class AppModel {
                                        context: ContextReader.read(paths),
                                        transcript: { [transcripts] in transcripts.context(forSession: $0, windows: windows) },
                                        isAlive: isSessionProcess)
-        let nextLimits = LimitsReader.read(paths)
+        refreshAccount()
+        // After switching accounts, the old account's limits wait until the new one reports its own.
+        let nextLimits = LimitsReader.read(paths).flatMap { $0.belongs(to: account) ? $0 : nil }
         var events: [AppEvent] = []
         let sessionEvents = memory.advance(to: next, isAlive: isProcessAlive)
         if loaded { events += sessionEvents }
@@ -173,6 +177,30 @@ final class AppModel {
             return KeyCombo(keyCode: 8, key: "c", command: true, option: true, control: true, shift: false)
         default: return .default
         }
+    }
+
+    /// Re-reads the signed-in account only when Claude Code's account file changes.
+    private func refreshAccount() {
+        let modified = (try? FileManager.default.attributesOfItem(atPath: paths.accountFile.path))?[.modificationDate] as? Date
+        guard modified != accountFileModified || modified == nil else { return }
+        accountFileModified = modified
+        let next = Account.current(paths)
+        guard next != account else { return }
+        account = next
+        let file = historyFile(for: next)
+        // History from before accounts were tracked belongs to whoever is signed in now.
+        let legacy = historyFile(for: nil)
+        if next != nil, !FileManager.default.fileExists(atPath: file.path) {
+            try? FileManager.default.moveItem(at: legacy, to: file)
+        }
+        history = UsageHistory(file: file)
+        dailyUsage = UsageHistory.dailyUsage(history.load(), days: 7)
+    }
+
+    /// One usage history per account, so switching accounts never mixes their charts.
+    private func historyFile(for account: String?) -> URL {
+        let name = account.map { "history-\($0.prefix(8)).json" } ?? "history.json"
+        return paths.appDir.appending(path: name)
     }
 
     func focus(_ session: Session) {
