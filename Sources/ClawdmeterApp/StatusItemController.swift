@@ -5,9 +5,10 @@ import SwiftUI
 @MainActor
 final class StatusItemController {
     private struct Appearance: Equatable {
-        var animating = false
+        var mood = Mood.asleep
+        var sweating = false
+        var animate = true
         var orange = true
-        var dimmed = false
         var title = NSAttributedString()
         var tooltip = ""
     }
@@ -31,6 +32,8 @@ final class StatusItemController {
         item.button?.target = self
         item.button?.action = #selector(toggle)
         item.button?.imagePosition = .imageLeading
+        item.button?.image = MenuBarIcon.blank
+        model.closePopover = { [weak self] in self?.popover.performClose(nil) }
         appearanceObservation = item.button?.observe(\.effectiveAppearance) { [weak self] _, _ in
             MainActor.assumeIsolated { self?.restartAnimation() }
         }
@@ -73,9 +76,10 @@ final class StatusItemController {
 
     private func render() {
         let appearance = Appearance(
-            animating: model.aggregate.state == .working && model.animate,
+            mood: model.mood,
+            sweating: model.sweating,
+            animate: model.animate,
             orange: model.orangeIcon,
-            dimmed: model.sessions.isEmpty,
             title: title(),
             tooltip: tooltip()
         )
@@ -83,50 +87,51 @@ final class StatusItemController {
         let old = rendered
         rendered = appearance
         // Only touch what changed: a title change re-lays out the whole status item.
-        if old?.animating != appearance.animating || old?.orange != appearance.orange {
-            button.image = appearance.animating ? MenuBarIcon.blank : MenuBarIcon.image(frame: 0, orange: appearance.orange)
+        if old?.title != appearance.title { button.attributedTitle = appearance.title }
+        if old?.tooltip != appearance.tooltip { button.toolTip = appearance.tooltip }
+        if old?.mood != appearance.mood || old?.sweating != appearance.sweating || old?.animate != appearance.animate
+            || old?.orange != appearance.orange || old?.title != appearance.title {
             restartAnimation()
         }
-        if old?.dimmed != appearance.dimmed { button.appearsDisabled = appearance.dimmed }
-        if old?.title != appearance.title {
-            button.attributedTitle = appearance.title
-            if appearance.animating { restartAnimation() }
-        }
-        if old?.tooltip != appearance.tooltip { button.toolTip = appearance.tooltip }
     }
 
-    /// The scuttle runs as a Core Animation keyframe animation, so the render server
-    /// drives it and this process stays asleep while Claude works.
+    /// Clawd is drawn by a layer whose frames are a Core Animation keyframe animation,
+    /// so the render server drives every mood and this process stays asleep.
     private func restartAnimation() {
         iconLayer?.removeFromSuperlayer()
         iconLayer = nil
-        guard let state = rendered, state.animating, let button = item.button,
-              let cell = button.cell as? NSButtonCell else { return }
+        guard let state = rendered, let button = item.button, let cell = button.cell as? NSButtonCell else { return }
         button.wantsLayer = true
         button.layoutSubtreeIfNeeded()
 
-        let frames = (0..<MenuBarIcon.frameCount).compactMap {
-            MenuBarIcon.image(frame: $0, orange: true).cgImage(forProposedRect: nil, context: nil, hints: nil)
+        var body = MenuBarIcon.claudeOrange
+        if !state.orange {
+            button.effectiveAppearance.performAsCurrentDrawingAppearance {
+                body = NSColor.labelColor.usingColorSpace(.sRGB) ?? .labelColor
+            }
         }
+        let animation = MenuBarIcon.animation(state.mood)
+        let frames = animation.frames
+            .map { state.sweating ? MenuBarIcon.withSweat($0) : $0 }
+            .compactMap { MenuBarIcon.cgImage($0, body: body) }
+
         let layer = CALayer()
         layer.frame = cell.imageRect(forBounds: button.bounds)
-        let mask = CALayer()
-        mask.frame = layer.bounds
-        mask.contentsGravity = .resizeAspect
-        mask.contents = frames.first
-        layer.mask = mask
-        var color = MenuBarIcon.claudeOrange.cgColor
-        if !state.orange {
-            button.effectiveAppearance.performAsCurrentDrawingAppearance { color = NSColor.labelColor.cgColor }
-        }
-        layer.backgroundColor = color
+        layer.contentsGravity = .resizeAspect
+        layer.magnificationFilter = .nearest
+        layer.contents = frames.first
+        layer.opacity = state.mood == .asleep ? 0.45 : 1
 
-        let animation = CAKeyframeAnimation(keyPath: "contents")
-        animation.values = frames
-        animation.calculationMode = .discrete
-        animation.duration = 0.5
-        animation.repeatCount = .infinity
-        mask.add(animation, forKey: "scuttle")
+        if state.animate, frames.count > 1 {
+            let keyframes = CAKeyframeAnimation(keyPath: "contents")
+            keyframes.values = frames
+            keyframes.calculationMode = .discrete
+            keyframes.duration = animation.frameDuration * Double(frames.count)
+            keyframes.repeatCount = animation.repeats ? .infinity : 1
+            keyframes.isRemovedOnCompletion = false
+            keyframes.fillMode = .forwards
+            layer.add(keyframes, forKey: "mood")
+        }
 
         button.layer?.addSublayer(layer)
         iconLayer = layer
@@ -136,20 +141,21 @@ final class StatusItemController {
         let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize - 1, weight: .medium)
         let result = NSMutableAttributedString()
         func append(_ text: String, color: NSColor = .labelColor) {
-            result.append(NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color]))
+            let spaced = result.length == 0 ? text : " " + text
+            result.append(NSAttributedString(string: spaced, attributes: [.font: font, .foregroundColor: color]))
         }
 
         if model.aggregate.state == .waiting {
-            append(" ●", color: .systemYellow)
+            append("●", color: .systemYellow)
         }
         if model.showCount, model.sessions.count > 1 {
-            append(" \(model.sessions.count)")
+            append("\(model.sessions.count)")
         }
         if model.showLimit, let limits = model.limits, let headline = limits.headline {
             let used = headline.window.usedPercentage
             let color: NSColor = limits.isStale() ? .tertiaryLabelColor
                 : used >= 90 ? .systemRed : used >= 70 ? .systemOrange : .labelColor
-            append(" \(headline.label) \(Int(used.rounded(.down)))%", color: color)
+            append("\(headline.label) \(Int(used.rounded(.down)))%", color: color)
         }
         return result
     }

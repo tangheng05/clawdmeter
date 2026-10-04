@@ -8,11 +8,11 @@ struct PopoverView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
-            LimitsSection(limits: model.limits)
+            LimitsSection(limits: model.limits, dailyUsage: model.dailyUsage)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
             Divider()
-            SessionsSection(sessions: model.sessions)
+            SessionsSection(sessions: model.sessions, onSelect: model.focus)
             if !(model.installStatus.statusline && model.installStatus.hooks) || model.installError != nil {
                 Divider()
                 SetupBanner(model: model)
@@ -25,7 +25,7 @@ struct PopoverView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Image(nsImage: MenuBarIcon.image(frame: 0, orange: true))
+            ClawdView(mood: model.mood, sweating: model.sweating, animate: model.animate)
             Text(headline).font(.system(size: 13, weight: .semibold))
             Spacer()
         }
@@ -50,6 +50,13 @@ struct PopoverView: View {
                 Toggle("Show usage in menu bar", isOn: $model.showLimit)
                 Toggle("Animate while working", isOn: $model.animate)
                 Toggle("Orange icon", isOn: $model.orangeIcon)
+                Divider()
+                Section("Notify me when") {
+                    Toggle("A task finishes", isOn: $model.notifyFinished)
+                    Toggle("A session needs me", isOn: $model.notifyWaiting)
+                    Toggle("A limit gets close or resets", isOn: $model.notifyLimits)
+                    Toggle("Play a sound", isOn: $model.notifySound)
+                }
                 Divider()
                 Toggle("Launch at login", isOn: $model.launchAtLogin)
                 Divider()
@@ -87,6 +94,7 @@ func usageColor(_ used: Double) -> Color {
 
 private struct LimitsSection: View {
     let limits: RateLimits?
+    let dailyUsage: [UsageHistory.Day]
 
     var body: some View {
         if let limits {
@@ -95,6 +103,7 @@ private struct LimitsSection: View {
                     Meter(title: "5-hour", window: limits.fiveHour, resetStyle: .countdown)
                     Meter(title: "Weekly", window: limits.sevenDay, resetStyle: .clock)
                 }
+                PaceRow(window: limits.sevenDay, dailyUsage: dailyUsage)
                 if limits.isStale() {
                     Text("Last updated \(limits.updatedAt.formatted(date: .omitted, time: .shortened))")
                         .font(.system(size: 11)).foregroundStyle(.tertiary)
@@ -151,16 +160,14 @@ private struct Meter: View {
             let minutes = Int(reset.timeIntervalSince(now) / 60)
             return minutes >= 60 ? "resets in \(minutes / 60)h \(minutes % 60)m" : "resets in \(max(minutes, 1))m"
         case .clock:
-            let day = Calendar.current.isDateInToday(reset) ? "today"
-                : Calendar.current.isDateInTomorrow(reset) ? "tomorrow"
-                : reset.formatted(.dateTime.weekday(.abbreviated))
-            return "resets \(day) \(reset.formatted(date: .omitted, time: .shortened))"
+            return "resets \(dayAndTime(reset))"
         }
     }
 }
 
 private struct SessionsSection: View {
     let sessions: [Session]
+    let onSelect: (Session) -> Void
 
     var body: some View {
         if sessions.isEmpty {
@@ -171,7 +178,9 @@ private struct SessionsSection: View {
                 .padding(.vertical, 14)
         } else {
             let list = VStack(spacing: 0) {
-                ForEach(sessions) { SessionRow(session: $0) }
+                ForEach(sessions) { session in
+                    SessionRow(session: session) { onSelect(session) }
+                }
             }
             .padding(.vertical, 4)
             // A fixed height keeps the popover from resizing (and drifting) after it opens.
@@ -186,8 +195,17 @@ private struct SessionsSection: View {
 
 private struct SessionRow: View {
     let session: Session
+    let action: () -> Void
+    @State private var hovering = false
 
     var body: some View {
+        Button(action: action) { content }
+            .buttonStyle(.plain)
+            .onHover { hovering = $0 }
+            .help("Open \(session.cwd)")
+    }
+
+    private var content: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Circle().fill(dotColor).frame(width: 7, height: 7)
                 .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
@@ -209,9 +227,12 @@ private struct SessionRow: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .help(session.cwd)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(Color.primary.opacity(hovering ? 0.07 : 0)))
+        .contentShape(Rectangle())
+        .padding(.horizontal, 6)
     }
 
     private var dotColor: Color {
@@ -258,4 +279,82 @@ func elapsed(from start: Date, to end: Date, coarse: Bool = false) -> String {
     if seconds < 60 { return "\(seconds)s" }
     if seconds < 3600 { return coarse ? "\(seconds / 60)m" : "\(seconds / 60)m \(String(format: "%02d", seconds % 60))s" }
     return "\(seconds / 3600)h \(seconds % 3600 / 60)m"
+}
+
+/// Weekly usage per day plus a plain-language forecast for the weekly limit.
+private struct PaceRow: View {
+    let window: LimitWindow?
+    let dailyUsage: [UsageHistory.Day]
+
+    var body: some View {
+        let hasHistory = dailyUsage.contains { $0.amount > 0 }
+        let forecast = window.flatMap { Pace.forecast($0) }
+        if hasHistory || forecast != nil {
+            HStack(alignment: .bottom, spacing: 14) {
+                if hasHistory { chart }
+                if let forecast { forecastText(forecast) }
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    private var chart: some View {
+        let peak = max(dailyUsage.map(\.amount).max() ?? 1, 1)
+        return HStack(alignment: .bottom, spacing: 4) {
+            ForEach(Array(dailyUsage.enumerated()), id: \.offset) { index, day in
+                VStack(spacing: 3) {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(index == dailyUsage.count - 1 ? Color.primary.opacity(0.75) : Color.primary.opacity(0.28))
+                        .frame(width: 8, height: max(2, 24 * day.amount / peak))
+                        .frame(height: 24, alignment: .bottom)
+                    Text(day.date.formatted(.dateTime.weekday(.narrow)))
+                        .font(.system(size: 9)).foregroundStyle(.tertiary)
+                }
+                .help("\(day.date.formatted(.dateTime.weekday(.wide))): \(Int(day.amount.rounded()))% of the weekly limit")
+            }
+        }
+    }
+
+    private func forecastText(_ forecast: PaceForecast) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            switch forecast {
+            case .hitsLimit(let at):
+                Text("On pace to run out").foregroundStyle(.orange)
+                Text(dayAndTime(at)).foregroundStyle(.secondary)
+            case .onTrack(let projected):
+                Text("On track")
+                Text("About \(projected)% by reset").foregroundStyle(.secondary)
+            }
+        }
+        .font(.system(size: 11, weight: .medium))
+    }
+}
+
+/// The popover's Clawd, playing the same mood as the menu bar while the popover is open.
+private struct ClawdView: View {
+    let mood: Mood
+    let sweating: Bool
+    let animate: Bool
+
+    var body: some View {
+        let animation = MenuBarIcon.animation(mood)
+        let frames = animation.frames.map { sweating ? MenuBarIcon.withSweat($0) : $0 }
+        TimelineView(.periodic(from: .now, by: animation.frameDuration)) { context in
+            let tick = Int(context.date.timeIntervalSinceReferenceDate / animation.frameDuration)
+            let index = animate ? (animation.repeats ? tick % frames.count : min(tick, frames.count - 1)) : 0
+            Image(nsImage: MenuBarIcon.image(frames[index % frames.count]))
+                .interpolation(.none)
+                .opacity(mood == .asleep ? 0.45 : 1)
+        }
+    }
+}
+
+/// "today 4:00 PM", "tomorrow 9:30 AM", or "Wed 6:24 PM".
+func dayAndTime(_ date: Date) -> String {
+    let calendar = Calendar.current
+    let day = calendar.isDateInToday(date) ? "today"
+        : calendar.isDateInTomorrow(date) ? "tomorrow"
+        : date.formatted(.dateTime.weekday(.abbreviated))
+    return "\(day) \(date.formatted(date: .omitted, time: .shortened))"
 }

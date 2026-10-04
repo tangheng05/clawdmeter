@@ -7,10 +7,11 @@ BIN = $(shell $(BUILD) --show-bin-path)
 app:
 	$(BUILD)
 	rm -rf $(APP)
-	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Helpers
+	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Helpers $(APP)/Contents/Resources
 	cp $(BIN)/ClawdmeterApp $(APP)/Contents/MacOS/
 	cp $(BIN)/clawdmeter $(APP)/Contents/Helpers/
 	cp Resources/Info.plist $(APP)/Contents/
+	cp Resources/AppIcon.icns $(APP)/Contents/Resources/
 	codesign --force --sign - $(APP)/Contents/Helpers/clawdmeter
 	codesign --force --sign - $(APP)
 

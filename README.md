@@ -30,18 +30,38 @@ That's it. An orange Clawd appears in your menu bar. Send a message in Claude Co
 
 ## What the menu bar shows
 
-| You see | It means |
+Clawd acts out what Claude is doing:
+
+| Clawd | It means |
 | --- | --- |
-| Clawd walking | Claude is working |
-| Yellow dot | A session needs you, like a permission question |
-| Clawd standing still | Everything is idle |
-| Faded Clawd | No Claude Code sessions are open |
-| `wk 86%` | Usage of whichever limit is closest to running out (`5h` or `wk`). Turns amber at 70% and red at 90% |
-| `2` | Number of sessions, when more than one is open |
+| Scuttling | Claude is working |
+| Waving its claws, with a yellow dot | A session needs you, like a permission question |
+| Dozing with a little z | Everything is idle |
+| A quick hop | A task just finished |
+| A blue sweat drop | You've used 90% or more of a limit |
+| Faded | No Claude Code sessions are open |
 
-Click Clawd to see both limits with their reset times, and every session with its folder, git branch and what it's doing.
+Next to Clawd, `wk 86%` shows whichever limit is closest to running out (`5h` or `wk`). It turns amber at 70% and red at 90%. A number like `2` shows how many sessions are open.
 
-Click the gear to choose what shows in the menu bar or to turn on **Launch at login**, so it's always there when you start your Mac.
+## The popover
+
+Click Clawd to see:
+
+- **Both limits** with their reset times.
+- **Your week so far:** a bar for each day's usage, and whether you're on track or will run out before the reset.
+- **Every session** with its folder, git branch and what it's doing. **Click a session to jump to it.** Terminal and iTerm2 open the exact tab (macOS asks once for permission), tmux switches to the right pane, VS Code, Cursor and Zed open the project window, and other apps come to the front.
+
+The gear menu has the settings, including **Launch at login** so Clawdmeter is always there when you start your Mac.
+
+## Notifications
+
+Clawdmeter can tell you when:
+
+- a task that took 30 seconds or more finishes,
+- a session needs your answer,
+- a limit reaches 80% or 95%, or resets after heavy use.
+
+It stays quiet when you're already looking at that session. Click a notification to jump to the session. Choose which ones you want, and whether they play a sound, from the gear menu.
 
 ## What it changes on your Mac
 
@@ -52,6 +72,10 @@ You'll notice a short line at the bottom of Claude Code showing your model, fold
 Clawdmeter uses no Claude tokens and never goes online. Everything stays on your Mac.
 
 ## Troubleshooting
+
+**No notifications.** Open **System Settings → Notifications → Clawdmeter** and allow them.
+
+**Clicking a session doesn't open the right tab.** Allow Clawdmeter under **System Settings → Privacy & Security → Automation**.
 
 **No sessions show up.** Send a message in Claude Code, or start a new session. Sessions that were open before you installed appear once they do something.
 
