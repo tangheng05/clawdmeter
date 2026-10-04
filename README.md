@@ -2,8 +2,10 @@
 
 A tiny menu bar app for Claude Code on Mac. See at a glance whether Claude is working or waiting for you, and how much of your usage limits you have left.
 
-<img src="assets/menubar.png" height="30"> <br>
-<img src="assets/popover.png" width="320">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/hero-dark.png">
+  <img src="assets/hero-light.png" alt="Clawdmeter in the menu bar, with its popover open showing usage limits and three Claude Code sessions" width="760">
+</picture>
 
 ## Install
 

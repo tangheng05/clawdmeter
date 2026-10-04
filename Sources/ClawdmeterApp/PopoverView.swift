@@ -224,7 +224,8 @@ private struct SessionRow: View {
 
     private var detail: String {
         switch session.state {
-        case .waiting: session.waitingFor.map { "Needs you: \($0)" } ?? "Needs you"
+        case .waiting:
+            session.waitingFor.flatMap { $0 == "dialog open" ? nil : "Needs you: \($0)" } ?? "Needs you"
         case .working: session.tool.map { "Running \($0)" } ?? "Thinking"
         case .idle:
             Date.now.timeIntervalSince(session.since) >= 60
