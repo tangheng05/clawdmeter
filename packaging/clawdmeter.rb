@@ -7,13 +7,17 @@ cask "clawdmeter" do
   desc "Menu bar status and usage limits for Claude Code"
   homepage "https://github.com/tangheng05/clawdmeter"
 
-  depends_on macos: ">= :tahoe"
+  depends_on macos: :tahoe
 
   app "Clawdmeter.app"
 
   # The app isn't notarized; this skips the "Open Anyway" step.
-  postflight do
-    system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{appdir}/Clawdmeter.app"]
+  postflight_steps do
+    run "/usr/bin/xattr",
+        args:           ["-dr", "com.apple.quarantine", "/Applications/Clawdmeter.app"],
+        must_succeed:   false,
+        writable_paths: ["Clawdmeter.app"],
+        writable_base:  :appdir
   end
 
   uninstall quit: "io.github.tangheng05.clawdmeter"

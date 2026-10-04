@@ -33,7 +33,7 @@ Clawd appears in your menu bar, and a short welcome screen helps you finish sett
 <details>
 <summary>Other ways to install</summary>
 
-**Homebrew:** `brew install --cask tangheng05/tap/clawdmeter`
+**Homebrew:** `brew install --cask tangheng05/tap/clawdmeter`. Already installed it another way? Add `--adopt` so Homebrew takes over your existing copy.
 
 **Download:** get **Clawdmeter.zip** from the [latest release](https://github.com/tangheng05/clawdmeter/releases/latest) and drag the app into Applications. The first time you open it, macOS blocks it because this free app isn't registered with Apple: go to **System Settings → Privacy & Security** and click **Open Anyway**.
 
