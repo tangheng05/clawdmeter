@@ -22,6 +22,7 @@ final class StatusItemController {
     private var iconLayer: CALayer?
     private var appearanceObservation: NSKeyValueObservation?
     private var outsideClickMonitor: Any?
+    private var lastClosed = Date.distantPast
 
     init(model: AppModel) {
         self.model = model
@@ -36,7 +37,10 @@ final class StatusItemController {
         item.button?.image = MenuBarIcon.blank
         NotificationCenter.default.addObserver(forName: NSPopover.didCloseNotification, object: popover,
                                                queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.stopWatchingOutsideClicks() }
+            MainActor.assumeIsolated {
+                self?.lastClosed = .now
+                self?.stopWatchingOutsideClicks()
+            }
         }
         model.closePopover = { [weak self] in self?.popover.performClose(nil) }
         appearanceObservation = item.button?.observe(\.effectiveAppearance) { [weak self] _, _ in
@@ -178,6 +182,9 @@ final class StatusItemController {
         if popover.isShown {
             popover.performClose(nil)
         } else {
+            // A click on the icon first closes the popover (it's outside it), then fires this
+            // action; reopening right away would make it flicker, so treat it as the close.
+            guard Date.now.timeIntervalSince(lastClosed) > 0.3 else { return }
             model.reload()
             fitPopover()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
