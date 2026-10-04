@@ -145,10 +145,11 @@ final class StatusItemController {
         if model.showCount, model.sessions.count > 1 {
             append(" \(model.sessions.count)")
         }
-        if model.showLimit, let five = model.limits?.fiveHour {
-            let stale = model.limits?.isStale() ?? true
-            let color: NSColor = stale ? .tertiaryLabelColor : five.usedPercentage >= 80 ? .systemRed : .labelColor
-            append(" \(Int(five.usedPercentage.rounded(.down)))%", color: color)
+        if model.showLimit, let limits = model.limits, let headline = limits.headline {
+            let used = headline.window.usedPercentage
+            let color: NSColor = limits.isStale() ? .tertiaryLabelColor
+                : used >= 90 ? .systemRed : used >= 70 ? .systemOrange : .labelColor
+            append(" \(headline.label) \(Int(used.rounded(.down)))%", color: color)
         }
         return result
     }

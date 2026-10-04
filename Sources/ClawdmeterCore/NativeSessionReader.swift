@@ -18,6 +18,7 @@ public enum NativeSessionReader {
         let sessionId: String?
         let cwd: String?
         let name: String?
+        let nameSource: String?
         let status: String?
         let waitingFor: String?
         let statusUpdatedAt: Double?
@@ -32,7 +33,8 @@ public enum NativeSessionReader {
                 pid: raw.pid,
                 sessionId: raw.sessionId,
                 cwd: raw.cwd,
-                name: raw.name,
+                // Auto-generated names like "personal-11" are less useful than the folder.
+                name: raw.nameSource == "derived" ? nil : raw.name,
                 state: state(status: raw.status, waitingFor: raw.waitingFor),
                 waitingFor: raw.waitingFor,
                 statusChangedAt: (raw.statusUpdatedAt ?? raw.updatedAt).map(dateFromEpoch)

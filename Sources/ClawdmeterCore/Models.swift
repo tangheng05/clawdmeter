@@ -15,9 +15,10 @@ public struct Session: Identifiable, Equatable, Sendable {
     public var since: Date
     public var tool: String?
     public var waitingFor: String?
+    public var branch: String?
 
     public init(id: String, pid: Int32, cwd: String, name: String?, state: SessionState, since: Date,
-                tool: String? = nil, waitingFor: String? = nil) {
+                tool: String? = nil, waitingFor: String? = nil, branch: String? = nil) {
         self.id = id
         self.pid = pid
         self.cwd = cwd
@@ -26,6 +27,7 @@ public struct Session: Identifiable, Equatable, Sendable {
         self.since = since
         self.tool = tool
         self.waitingFor = waitingFor
+        self.branch = branch
     }
 
     public var displayName: String {
@@ -60,5 +62,11 @@ public struct RateLimits: Equatable, Sendable {
 
     public func isStale(now: Date = .now) -> Bool {
         now.timeIntervalSince(updatedAt) > Self.staleAfter
+    }
+
+    /// The window closest to its limit, for the menu bar.
+    public var headline: (label: String, window: LimitWindow)? {
+        let candidates = [("5h", fiveHour), ("wk", sevenDay)].compactMap { label, w in w.map { (label, $0) } }
+        return candidates.max { $0.1.usedPercentage < $1.1.usedPercentage }.map { (label: $0.0, window: $0.1) }
     }
 }

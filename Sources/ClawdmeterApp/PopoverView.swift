@@ -9,7 +9,8 @@ struct PopoverView: View {
             header
             Divider()
             LimitsSection(limits: model.limits)
-                .padding(14)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
             Divider()
             SessionsSection(sessions: model.sessions)
             if !(model.installStatus.statusline && model.installStatus.hooks) || model.installError != nil {
@@ -23,33 +24,30 @@ struct PopoverView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Image(nsImage: MenuBarIcon.image(frame: 0, orange: true))
-            Text("clawdmeter").font(.headline)
+            Text(headline).font(.system(size: 13, weight: .semibold))
             Spacer()
-            Text(summary).font(.subheadline).foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
     }
 
-    private var summary: String {
+    private var headline: String {
         let s = model.sessions
-        if s.isEmpty { return "No sessions" }
-        let working = s.filter { $0.state == .working }.count
         let waiting = s.filter { $0.state == .waiting }.count
-        var parts: [String] = []
-        if waiting > 0 { parts.append("\(waiting) waiting") }
-        if working > 0 { parts.append("\(working) working") }
-        if parts.isEmpty { parts.append(s.count == 1 ? "1 idle" : "\(s.count) idle") }
-        return parts.joined(separator: " · ")
+        let working = s.filter { $0.state == .working }.count
+        if s.isEmpty { return "No sessions running" }
+        if waiting > 0 { return waiting == 1 ? "A session needs you" : "\(waiting) sessions need you" }
+        if working > 0 { return working == 1 ? "Claude is working" : "\(working) sessions working" }
+        return s.count == 1 ? "Claude is idle" : "All \(s.count) sessions idle"
     }
 
     private var footer: some View {
         HStack {
             Menu {
                 Toggle("Show session count", isOn: $model.showCount)
-                Toggle("Show 5-hour usage", isOn: $model.showLimit)
+                Toggle("Show usage in menu bar", isOn: $model.showLimit)
                 Toggle("Animate while working", isOn: $model.animate)
                 Toggle("Orange icon", isOn: $model.orangeIcon)
                 Divider()
@@ -67,74 +65,97 @@ struct PopoverView: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
+            .help("Settings")
             Spacer()
             Button("Quit") { NSApp.terminate(nil) }
                 .buttonStyle(.borderless)
                 .keyboardShortcut("q")
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .font(.system(size: 12))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
     }
+}
+
+/// Neutral until a limit gets close, so color always means "watch out".
+func usageColor(_ used: Double) -> Color {
+    if used >= 90 { return .red }
+    if used >= 70 { return .orange }
+    return .primary
 }
 
 private struct LimitsSection: View {
     let limits: RateLimits?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if let limits, limits.fiveHour != nil || limits.sevenDay != nil {
-                let stale = limits.isStale()
-                LimitBar(title: "5-hour", window: limits.fiveHour)
-                LimitBar(title: "Weekly", window: limits.sevenDay)
-                if stale {
-                    Text("As of \(limits.updatedAt.formatted(date: .omitted, time: .shortened))")
-                        .font(.caption).foregroundStyle(.tertiary)
+        if let limits {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 20) {
+                    Meter(title: "5-hour", window: limits.fiveHour, resetStyle: .countdown)
+                    Meter(title: "Weekly", window: limits.sevenDay, resetStyle: .clock)
                 }
-            } else {
-                Text("Usage limits appear after your next Claude Code message.")
-                    .font(.caption).foregroundStyle(.secondary)
+                if limits.isStale() {
+                    Text("Last updated \(limits.updatedAt.formatted(date: .omitted, time: .shortened))")
+                        .font(.system(size: 11)).foregroundStyle(.tertiary)
+                }
             }
+            .opacity(limits.isStale() ? 0.6 : 1)
+        } else {
+            Text("Usage limits show up after your next Claude Code message.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .opacity(limits?.isStale() == true ? 0.55 : 1)
     }
 }
 
-private struct LimitBar: View {
+private struct Meter: View {
+    enum ResetStyle { case countdown, clock }
+
     let title: String
     let window: LimitWindow?
+    let resetStyle: ResetStyle
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(title).font(.subheadline.weight(.medium))
-                Spacer()
-                if let window {
-                    if let reset = window.resetsAt, reset > .now {
-                        Text("resets \(reset, format: .relative(presentation: .named))")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    Text("\(Int(window.usedPercentage.rounded(.down)))%")
-                        .font(.subheadline.monospacedDigit().weight(.semibold))
-                } else {
-                    Text("—").foregroundStyle(.secondary)
-                }
+            Text(title).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+            Text(window.map { "\(Int($0.usedPercentage.rounded(.down)))%" } ?? "–")
+                .font(.system(size: 26, weight: .semibold).monospacedDigit())
+                .foregroundStyle(usageColor(window?.usedPercentage ?? 0))
+                .contentTransition(.numericText())
+            bar
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                Text(resetText(now: context.date))
+                    .font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
             }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.quaternary)
-                    Capsule().fill(color)
-                        .frame(width: geo.size.width * min(max((window?.usedPercentage ?? 0) / 100, 0), 1))
-                }
-            }
-            .frame(height: 6)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var color: Color {
-        let used = window?.usedPercentage ?? 0
-        if used >= 90 { return .red }
-        if used >= 70 { return .orange }
-        return Color(nsColor: MenuBarIcon.claudeOrange)
+    private var bar: some View {
+        let fraction = min(max((window?.usedPercentage ?? 0) / 100, 0), 1)
+        return GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(.quaternary)
+                Capsule().fill(usageColor(window?.usedPercentage ?? 0).opacity(0.85))
+                    .frame(width: max(geo.size.width * fraction, fraction > 0 ? 4 : 0))
+            }
+        }
+        .frame(height: 4)
+    }
+
+    private func resetText(now: Date) -> String {
+        guard let reset = window?.resetsAt, reset > now else { return " " }
+        switch resetStyle {
+        case .countdown:
+            let minutes = Int(reset.timeIntervalSince(now) / 60)
+            return minutes >= 60 ? "resets in \(minutes / 60)h \(minutes % 60)m" : "resets in \(max(minutes, 1))m"
+        case .clock:
+            let day = Calendar.current.isDateInToday(reset) ? "today"
+                : Calendar.current.isDateInTomorrow(reset) ? "tomorrow"
+                : reset.formatted(.dateTime.weekday(.abbreviated))
+            return "resets \(day) \(reset.formatted(date: .omitted, time: .shortened))"
+        }
     }
 }
 
@@ -143,15 +164,16 @@ private struct SessionsSection: View {
 
     var body: some View {
         if sessions.isEmpty {
-            Text("No Claude Code sessions running")
-                .font(.callout).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, 18)
+            Text("Start `claude` in a terminal and it shows up here.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
         } else {
-            let list = VStack(spacing: 2) {
+            let list = VStack(spacing: 0) {
                 ForEach(sessions) { SessionRow(session: $0) }
             }
-            .padding(6)
+            .padding(.vertical, 4)
             // A fixed height keeps the popover from resizing (and drifting) after it opens.
             if sessions.count > 6 {
                 ScrollView { list }.frame(height: 300)
@@ -166,21 +188,29 @@ private struct SessionRow: View {
     let session: Session
 
     var body: some View {
-        HStack(spacing: 10) {
-            Circle().fill(dotColor).frame(width: 8, height: 8)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(session.displayName).font(.callout.weight(.medium)).lineLimit(1)
-                Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Circle().fill(dotColor).frame(width: 7, height: 7)
+                .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(session.displayName).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                    if let branch = session.branch {
+                        Text(branch).font(.system(size: 11)).foregroundStyle(.tertiary).lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                Text(detail).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 8)
-            TimelineView(.periodic(from: session.since, by: 1)) { context in
-                Text(elapsed(from: session.since, to: context.date))
-                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            if session.state != .idle {
+                TimelineView(.periodic(from: session.since, by: 1)) { context in
+                    Text(elapsed(from: session.since, to: context.date))
+                        .font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+                }
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .contentShape(Rectangle())
+        .padding(.horizontal, 16)
+        .padding(.vertical, 7)
         .help(session.cwd)
     }
 
@@ -188,15 +218,17 @@ private struct SessionRow: View {
         switch session.state {
         case .waiting: .yellow
         case .working: Color(nsColor: MenuBarIcon.claudeOrange)
-        case .idle: .secondary.opacity(0.5)
+        case .idle: Color.secondary.opacity(0.4)
         }
     }
 
     private var detail: String {
         switch session.state {
-        case .waiting: "Needs you" + (session.waitingFor.map { " · \($0)" } ?? "")
+        case .waiting: session.waitingFor.map { "Needs you: \($0)" } ?? "Needs you"
         case .working: session.tool.map { "Running \($0)" } ?? "Thinking"
-        case .idle: "Idle"
+        case .idle:
+            Date.now.timeIntervalSince(session.since) >= 60
+                ? "Idle for \(elapsed(from: session.since, to: .now, coarse: true))" : "Idle"
         }
     }
 }
@@ -205,22 +237,24 @@ private struct SetupBanner: View {
     let model: AppModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             if let error = model.installError {
-                Text(error).font(.caption).foregroundStyle(.red)
+                Text(error).font(.system(size: 11)).foregroundStyle(.red)
             } else {
-                Text("Install the Claude Code integration to see tool activity and usage limits.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text("Connect to Claude Code to see tool activity and usage limits.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
             }
-            Button("Install") { model.install() }.controlSize(.small)
+            Button("Connect") { model.install() }.controlSize(.small)
         }
-        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 }
 
-func elapsed(from start: Date, to end: Date) -> String {
+func elapsed(from start: Date, to end: Date, coarse: Bool = false) -> String {
     let seconds = max(0, Int(end.timeIntervalSince(start)))
     if seconds < 60 { return "\(seconds)s" }
-    if seconds < 3600 { return "\(seconds / 60)m \(seconds % 60)s" }
+    if seconds < 3600 { return coarse ? "\(seconds / 60)m" : "\(seconds / 60)m \(String(format: "%02d", seconds % 60))s" }
     return "\(seconds / 3600)h \(seconds % 3600 / 60)m"
 }

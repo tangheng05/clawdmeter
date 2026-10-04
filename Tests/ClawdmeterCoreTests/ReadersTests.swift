@@ -166,6 +166,16 @@ import Testing
         #expect(s.map(\.id) == ["b"])
     }
 
+    @Test func onlyCustomNamesAreUsed() throws {
+        let dir = try TempDir()
+        try dir.write(#"{"pid":1,"sessionId":"a","cwd":"/x/app","name":"personal-11","nameSource":"derived"}"#,
+                      to: "sessions/1.json")
+        try dir.write(#"{"pid":2,"sessionId":"b","cwd":"/x/api","name":"Refactor","nameSource":"user"}"#,
+                      to: "sessions/2.json")
+        let s = SessionMerger.merge(native: NativeSessionReader.read(dir.paths), hooks: [], isAlive: { _ in true })
+        #expect(Set(s.map(\.displayName)) == ["app", "Refactor"])
+    }
+
     @Test func missingSessionIdFallsBackToPid() {
         let s = SessionMerger.merge(native: [native(3, nil, .idle)], hooks: [], isAlive: { _ in true })
         #expect(s.first?.id == "pid-3")

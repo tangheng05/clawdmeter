@@ -28,6 +28,9 @@ public enum SessionMerger {
             ))
         }
 
+        for i in sessions.indices where !sessions[i].cwd.isEmpty {
+            sessions[i].branch = GitBranch.current(in: sessions[i].cwd)
+        }
         return sessions.sorted { a, b in
             a.state != b.state ? a.state > b.state : a.since > b.since
         }

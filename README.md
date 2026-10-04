@@ -6,8 +6,8 @@ A tiny macOS menu bar app for Claude Code. See whether Claude is working or wait
 <img src="assets/popover.png" width="320">
 
 - **Live status:** Clawd scuttles while any session is working, and a yellow dot appears when one needs you.
-- **Every session:** project, what it's doing (`Running Bash`, `Thinking`, `Needs you`), and how long it's been at it.
-- **Usage limits:** 5-hour and weekly usage with reset times, straight from Claude Code.
+- **Every session:** project folder and git branch, what it's doing (`Running Bash`, `Thinking`, `Needs you`), and how long it's been at it.
+- **Usage limits:** 5-hour and weekly usage with reset times. The menu bar shows whichever is closer to its limit, and it turns amber at 70% and red at 90%.
 - **Close to zero energy use:** no polling. Updates come from FSEvents and kernel process-exit events, and the animation runs in Core Animation, so the app stays asleep even while the icon moves.
 - **No dependencies:** no Node, no Python. One small native helper handles the hooks.
 
