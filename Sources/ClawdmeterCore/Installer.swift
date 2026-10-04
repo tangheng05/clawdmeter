@@ -14,6 +14,12 @@ public struct InstallStatus: Equatable, Sendable {
     public let statusline: Bool
     public let hooks: Bool
     public let nativeSessions: Bool
+
+    public init(statusline: Bool, hooks: Bool, nativeSessions: Bool) {
+        self.statusline = statusline
+        self.hooks = hooks
+        self.nativeSessions = nativeSessions
+    }
 }
 
 public struct Installer: Sendable {
