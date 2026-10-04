@@ -7,19 +7,19 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     var onOpen: ((String) -> Void)?
     // Notifications need an app bundle; without one (e.g. `swift run`) they are skipped.
     private let center: UNUserNotificationCenter? = Bundle.main.bundleIdentifier == nil ? nil : .current()
-    private var asked = false
 
     override init() {
         super.init()
         center?.delegate = self
     }
 
+    /// Asked at launch so the first real notification isn't dropped while the prompt is up.
+    func requestPermission() {
+        center?.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
     func post(_ event: AppEvent, sessionId: String? = nil, sound: Bool) {
         guard let center else { return }
-        if !asked {
-            asked = true
-            center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
-        }
         let content = UNMutableNotificationContent()
         switch event {
         case .finished(_, let name, let duration):

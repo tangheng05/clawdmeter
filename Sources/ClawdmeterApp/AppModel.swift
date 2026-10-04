@@ -41,10 +41,12 @@ final class AppModel {
 
     @ObservationIgnored var closePopover: (() -> Void)?
 
-    var launchAtLogin: Bool {
-        get { SMAppService.mainApp.status == .enabled }
-        set {
-            try? newValue ? SMAppService.mainApp.register() : SMAppService.mainApp.unregister()
+    /// Stored so SwiftUI sees changes; the system setting is the source of truth.
+    var launchAtLogin = SMAppService.mainApp.status == .enabled {
+        didSet {
+            guard launchAtLogin != (SMAppService.mainApp.status == .enabled) else { return }
+            try? launchAtLogin ? SMAppService.mainApp.register() : SMAppService.mainApp.unregister()
+            launchAtLogin = SMAppService.mainApp.status == .enabled
         }
     }
 
@@ -54,6 +56,8 @@ final class AppModel {
     @ObservationIgnored private var processWatcher: ProcessWatcher?
     @ObservationIgnored private let notifier = Notifier()
     @ObservationIgnored private var loaded = false
+    @ObservationIgnored private var memory = SessionMemory()
+    @ObservationIgnored private let alertLog = AlertLog()
     @ObservationIgnored private var celebrationEnd: DispatchWorkItem?
     @ObservationIgnored private lazy var history = UsageHistory(file: paths.appDir.appending(path: "history.json"))
 
@@ -79,6 +83,8 @@ final class AppModel {
             defaults.set(true, forKey: "didAutoInstall")
             install()
         }
+        installer?.refreshHelperIfNeeded()
+        notifier.requestPermission()
         notifier.onOpen = { [weak self] id in
             guard let session = self?.sessions.first(where: { $0.id == id }) else { return }
             Focuser.focus(session)
@@ -96,14 +102,11 @@ final class AppModel {
                                        isAlive: isProcessAlive)
         let nextLimits = LimitsReader.read(paths)
         var events: [AppEvent] = []
-        if loaded { events += EventDetector.sessionEvents(old: sessions, new: next) }
-        var fired = Set(defaults.stringArray(forKey: "alertedLimits") ?? [])
+        let sessionEvents = memory.advance(to: next, isAlive: isProcessAlive)
+        if loaded { events += sessionEvents }
+        var fired = alertLog.load()
         events += EventDetector.limitEvents(old: loaded ? limits : nil, new: nextLimits, fired: &fired)
-        // Keys end in the window's reset time; once that passes they can never match again.
-        let live = fired.filter { key in
-            key.split(separator: "-").last.flatMap { Double($0) }.map { $0 == 0 || $0 > Date.now.timeIntervalSince1970 } ?? false
-        }
-        defaults.set(Array(live), forKey: "alertedLimits")
+        alertLog.save(fired)
         loaded = true
 
         if next != sessions {

@@ -23,6 +23,7 @@ final class StatusItemController {
     private var appearanceObservation: NSKeyValueObservation?
     private var outsideClickMonitor: Any?
     private var lastClosed = Date.distantPast
+    private var menuOpen = false
 
     init(model: AppModel) {
         self.model = model
@@ -35,6 +36,18 @@ final class StatusItemController {
         item.button?.action = #selector(toggle)
         item.button?.imagePosition = .imageLeading
         item.button?.image = MenuBarIcon.blank
+        // Resizing the popover while the gear menu is open makes macOS close the menu.
+        NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil,
+                                               queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.menuOpen = true }
+        }
+        NotificationCenter.default.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil,
+                                               queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.menuOpen = false
+                if self?.popover.isShown == true { self?.fitPopover() }
+            }
+        }
         NotificationCenter.default.addObserver(forName: NSPopover.didCloseNotification, object: popover,
                                                queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -65,6 +78,7 @@ final class StatusItemController {
     }
 
     private func fitPopover() {
+        guard !menuOpen else { return }
         let size = hosting.sizeThatFits(in: NSSize(width: 320, height: 10_000))
         if popover.contentSize != size { popover.contentSize = size }
     }

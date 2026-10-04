@@ -37,7 +37,8 @@ public enum EventDetector {
         ]
         for (label, before, after) in pairs {
             guard let after else { continue }
-            let window = Int(after.resetsAt?.timeIntervalSince1970 ?? 0)
+            // Keyed by the reset hour, so small drifts in the reported reset time don't re-alert.
+            let window = Int(((after.resetsAt?.timeIntervalSince1970 ?? 0) / 3600).rounded())
             if let crossed = thresholds.first(where: { after.usedPercentage >= Double($0) }) {
                 let key = "\(label)-\(crossed)-\(window)"
                 if !fired.contains(key) {
@@ -53,5 +54,47 @@ public enum EventDetector {
             }
         }
         return events
+    }
+
+    /// Whether an alert key can still match, i.e. its window hasn't reset yet.
+    public static func isLive(alertKey: String, now: Date = .now) -> Bool {
+        guard let value = alertKey.split(separator: "-").last.flatMap({ Double($0) }) else { return false }
+        // Older versions stored the reset time in seconds rather than hours.
+        let resetsAt = value > 100_000_000 ? value : value * 3600
+        return value == 0 || resetsAt > now.timeIntervalSince1970 - 3600
+    }
+}
+
+/// Last known state of each session, kept until its process exits, so a session that
+/// vanishes for one read (e.g. a half-written file) doesn't produce duplicate events.
+public struct SessionMemory: Sendable {
+    private var known: [String: Session] = [:]
+
+    public init() {}
+
+    public mutating func advance(to sessions: [Session], isAlive: (Int32) -> Bool, now: Date = .now) -> [AppEvent] {
+        let events = EventDetector.sessionEvents(old: Array(known.values), new: sessions, now: now)
+        for session in sessions { known[session.id] = session }
+        known = known.filter { isAlive($0.value.pid) }
+        return events
+    }
+}
+
+/// Limit alerts already sent, persisted so they don't repeat after a restart.
+public struct AlertLog: @unchecked Sendable {
+    static let key = "alertedLimits"
+    let defaults: UserDefaults
+
+    public init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    public func load() -> Set<String> {
+        Set(defaults.stringArray(forKey: Self.key) ?? [])
+    }
+
+    public func save(_ fired: Set<String>, now: Date = .now) {
+        // UserDefaults only stores arrays, never sets.
+        defaults.set(fired.filter { EventDetector.isLive(alertKey: $0, now: now) }.sorted(), forKey: Self.key)
     }
 }

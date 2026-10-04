@@ -1,6 +1,19 @@
-# clawdmeter
+<p align="center">
+  <img src="assets/icon.png" width="128" alt="Clawdmeter app icon">
+</p>
 
-A tiny menu bar app for Claude Code on Mac. See at a glance whether Claude is working or waiting for you, and how much of your usage limits you have left.
+<h1 align="center">clawdmeter</h1>
+
+<p align="center">
+  A tiny Clawd in your Mac menu bar that shows what Claude Code is doing,<br>
+  and how much of your usage limits you have left.
+</p>
+
+<p align="center">
+  <a href="https://github.com/tangheng05/clawdmeter/releases/latest"><img src="https://img.shields.io/github/v/release/tangheng05/clawdmeter?color=d97757&label=release" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/macOS-26%2B-555" alt="macOS 26 or later">
+  <img src="https://img.shields.io/badge/license-MIT-555" alt="MIT license">
+</p>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/hero-dark.png">
@@ -28,20 +41,26 @@ That's it. An orange Clawd appears in your menu bar. Send a message in Claude Co
 
 </details>
 
-## What the menu bar shows
+## Meet Clawd
 
-Clawd acts out what Claude is doing:
+Clawd lives in your menu bar and acts out what Claude is doing, so you can tell at a glance without switching windows.
 
-| Clawd | It means |
-| --- | --- |
-| Scuttling | Claude is working |
-| Waving its claws, with a yellow dot | A session needs you, like a permission question |
-| Dozing with a little z | Everything is idle |
-| A quick hop | A task just finished |
-| A blue sweat drop | You've used 90% or more of a limit |
-| Faded | No Claude Code sessions are open |
+<table>
+  <tr>
+    <td align="center" width="33%"><img src="assets/moods/working.png" width="88" alt="Clawd scuttling"><br><b>Working</b><br>Scuttles while Claude works</td>
+    <td align="center" width="33%"><img src="assets/moods/waiting.png" width="88" alt="Clawd waving its claws"><br><b>Needs you</b><br>Waves its claws, with a yellow dot</td>
+    <td align="center" width="33%"><img src="assets/moods/done.png" width="88" alt="Clawd hopping"><br><b>Done</b><br>Hops when a task finishes</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="assets/moods/idle.png" width="88" alt="Clawd dozing"><br><b>Idle</b><br>Dozes off with a little z</td>
+    <td align="center"><img src="assets/moods/sweating.png" width="88" alt="Clawd sweating"><br><b>Close to a limit</b><br>Breaks a sweat at 90%</td>
+    <td align="center"><img src="assets/moods/asleep.png" width="88" alt="Faded Clawd"><br><b>No sessions</b><br>Fades out and waits</td>
+  </tr>
+</table>
 
 Next to Clawd, `wk 86%` shows whichever limit is closest to running out (`5h` or `wk`). It turns amber at 70% and red at 90%. A number like `2` shows how many sessions are open.
+
+Clawd costs your Mac almost nothing. The animations run in macOS's own animation engine and the app only wakes up when something changes, so it uses close to 0% CPU even while Clawd moves.
 
 ## The popover
 

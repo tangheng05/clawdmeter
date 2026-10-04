@@ -66,6 +66,16 @@ public struct Installer: Sendable {
         try writeSettings(settings)
     }
 
+    /// Updates the copied helper after an app update; does nothing if the integration isn't installed.
+    @discardableResult
+    public func refreshHelperIfNeeded() -> Bool {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: paths.helperPath.path),
+              let bundled = try? Data(contentsOf: helperSource),
+              (try? Data(contentsOf: paths.helperPath)) != bundled else { return false }
+        return (try? installHelper()) != nil
+    }
+
     public func uninstall() throws {
         var settings = try readSettings()
         try backup()

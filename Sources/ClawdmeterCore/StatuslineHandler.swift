@@ -6,7 +6,7 @@ public enum StatuslineHandler {
                               runPrevious: (String, Data) -> String?) -> String {
         let json = (try? JSONSerialization.jsonObject(with: input)) as? [String: Any]
 
-        if let limits = json?["rate_limits"] as? [String: Any],
+        if let limits = json?["rate_limits"] as? [String: Any], needsWrite(limits, paths: paths, now: now),
            let data = try? JSONSerialization.data(withJSONObject: ["ts": now.timeIntervalSince1970, "rate_limits": limits]) {
             try? writeAtomically(data, to: paths.limitsFile)
         }
@@ -17,6 +17,15 @@ public enum StatuslineHandler {
         }
         guard let json else { return "" }
         return compactLine(json)
+    }
+
+    /// Skips rewriting identical limits for a minute; each write wakes the menu bar app.
+    static func needsWrite(_ limits: [String: Any], paths: ClaudePaths, now: Date) -> Bool {
+        guard let data = try? Data(contentsOf: paths.limitsFile),
+              let saved = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let ts = saved["ts"] as? Double,
+              let savedLimits = saved["rate_limits"] as? [String: Any] else { return true }
+        return now.timeIntervalSince1970 - ts >= 60 || !NSDictionary(dictionary: savedLimits).isEqual(to: limits)
     }
 
     static func compactLine(_ json: [String: Any]) -> String {
