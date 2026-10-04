@@ -148,14 +148,16 @@ private struct SessionsSection: View {
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 18)
         } else {
-            ScrollView {
-                VStack(spacing: 2) {
-                    ForEach(sessions) { SessionRow(session: $0) }
-                }
-                .padding(6)
+            let list = VStack(spacing: 2) {
+                ForEach(sessions) { SessionRow(session: $0) }
             }
-            .frame(maxHeight: 300)
-            .fixedSize(horizontal: false, vertical: true)
+            .padding(6)
+            // A fixed height keeps the popover from resizing (and drifting) after it opens.
+            if sessions.count > 6 {
+                ScrollView { list }.frame(height: 300)
+            } else {
+                list
+            }
         }
     }
 }

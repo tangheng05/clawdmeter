@@ -15,6 +15,7 @@ final class StatusItemController {
     private let model: AppModel
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
+    private let hosting: NSHostingController<PopoverView>
     private var rendered: Appearance?
     private var staleTimer: Timer?
     private var iconLayer: CALayer?
@@ -22,8 +23,11 @@ final class StatusItemController {
 
     init(model: AppModel) {
         self.model = model
+        hosting = NSHostingController(rootView: PopoverView(model: model))
+        hosting.sizingOptions = []
         popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: PopoverView(model: model))
+        popover.animates = false
+        popover.contentViewController = hosting
         item.button?.target = self
         item.button?.action = #selector(toggle)
         item.button?.imagePosition = .imageLeading
@@ -42,8 +46,15 @@ final class StatusItemController {
     }
 
     private func update() {
+        _ = (model.installStatus, model.installError)
         scheduleStaleRefresh()
         render()
+        if popover.isShown { DispatchQueue.main.async { self.fitPopover() } }
+    }
+
+    private func fitPopover() {
+        let size = hosting.sizeThatFits(in: NSSize(width: 320, height: 10_000))
+        if popover.contentSize != size { popover.contentSize = size }
     }
 
     /// One-shot timer at the moment limits go stale, instead of polling.
@@ -156,6 +167,7 @@ final class StatusItemController {
             popover.performClose(nil)
         } else {
             model.reload()
+            fitPopover()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }
