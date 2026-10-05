@@ -25,6 +25,15 @@ func runShell(_ command: String, stdin: Data) -> String? {
     return String(decoding: output, as: UTF8.self)
 }
 
+func printJSON(_ value: some Encodable) {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    encoder.dateEncodingStrategy = .iso8601
+    if let data = try? encoder.encode(value) {
+        FileHandle.standardOutput.write(data + Data("\n".utf8))
+    }
+}
+
 switch args.dropFirst().first {
 case "hook" where args.count >= 3:
     HookHandler.handle(event: args[2], input: input, paths: paths, parentPID: getppid())
@@ -39,7 +48,11 @@ case "uninstall":
         FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
         exit(1)
     }
+case "limits":
+    printJSON(LimitsReport(limits: RateLimits.best(paths: paths), snapshot: Account.read(paths)))
+case "spend":
+    printJSON(SpendIndex(paths: paths).refresh())
 default:
-    FileHandle.standardError.write(Data("usage: clawdmeter hook <event> | statusline | uninstall\n".utf8))
+    FileHandle.standardError.write(Data("usage: clawdmeter limits | spend | hook <event> | statusline | uninstall\n".utf8))
 }
 exit(0)

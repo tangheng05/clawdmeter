@@ -13,6 +13,11 @@ struct SettingsView: View {
             Section {
                 Toggle("Launch at login", isOn: $model.launchAtLogin)
                 Toggle("Show usage in the menu bar", isOn: $model.showLimit)
+                Toggle("Show what's left instead of what's used", isOn: $model.showRemaining)
+                Toggle("Hide usage while sharing your screen", isOn: $model.hideWhenSharing)
+                    .disabled(!ScreenShare.isAvailable)
+                    .help(ScreenShare.isAvailable ? "Only Clawd shows in the menu bar during screen shares and recordings"
+                                                  : "This version of macOS doesn't tell apps when the screen is shared")
                 Toggle("Show session count in the menu bar", isOn: $model.showCount)
                 Toggle("Animate Clawd", isOn: $model.animate)
                 Picker("Clawd's color", selection: $model.orangeIcon) {

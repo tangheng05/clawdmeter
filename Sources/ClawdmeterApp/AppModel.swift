@@ -14,6 +14,12 @@ final class AppModel {
     private(set) var installError: String?
     private(set) var dailyUsage: [UsageHistory.Day] = []
     private(set) var celebrating = false
+    private(set) var spend: SpendSummary?
+    private(set) var plan: String?
+    /// True while the screen is being shared and usage should stay out of the menu bar.
+    private(set) var screenShared = false
+    /// While closed, the popover renders nothing, so its animation and timers don't run unseen.
+    var popoverOpen = false
     /// Bumped when a limit window resets, so time-based views refresh.
     private var resetTick = 0
 
@@ -27,6 +33,14 @@ final class AppModel {
     var showLimit: Bool { didSet { defaults.set(showLimit, forKey: "showLimit") } }
     var animate: Bool { didSet { defaults.set(animate, forKey: "animate") } }
     var orangeIcon: Bool { didSet { defaults.set(orangeIcon, forKey: "orangeIcon") } }
+    /// Limits read as what's left instead of what's used.
+    var showRemaining: Bool { didSet { defaults.set(showRemaining, forKey: "showRemaining") } }
+    var hideWhenSharing: Bool {
+        didSet {
+            defaults.set(hideWhenSharing, forKey: "hideWhenSharing")
+            watchScreenSharing()
+        }
+    }
     var notifyFinished: Bool { didSet { defaults.set(notifyFinished, forKey: "notifyFinished") } }
     var notifyWaiting: Bool { didSet { defaults.set(notifyWaiting, forKey: "notifyWaiting") } }
     var notifyLimits: Bool { didSet { defaults.set(notifyLimits, forKey: "notifyLimits") } }
@@ -84,6 +98,8 @@ final class AppModel {
     @ObservationIgnored private var account: String?
     @ObservationIgnored private var cachedLimits: RateLimits?
     @ObservationIgnored private var accountFileModified: Date?
+    @ObservationIgnored private lazy var spendIndex = SpendIndex(paths: paths)
+    @ObservationIgnored private var spendRefreshing = false
 
     init() {
         defaults.register(defaults: ["showCount": true, "showLimit": true, "orangeIcon": true,
@@ -94,6 +110,8 @@ final class AppModel {
         showLimit = defaults.bool(forKey: "showLimit")
         animate = defaults.bool(forKey: "animate")
         orangeIcon = defaults.bool(forKey: "orangeIcon")
+        showRemaining = defaults.bool(forKey: "showRemaining")
+        hideWhenSharing = defaults.bool(forKey: "hideWhenSharing")
         notifyFinished = defaults.bool(forKey: "notifyFinished")
         notifyWaiting = defaults.bool(forKey: "notifyWaiting")
         notifyLimits = defaults.bool(forKey: "notifyLimits")
@@ -129,7 +147,10 @@ final class AppModel {
             self?.reload()
         }
         reload()
+        watchScreenSharing()
         updater.start()
+        // The first read of the logs is the only slow one, so do it before the popover is opened.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.refreshSpend() }
     }
 
     func reload() {
@@ -139,12 +160,7 @@ final class AppModel {
                                        transcript: { [transcripts] in transcripts.context(forSession: $0, windows: windows) },
                                        isAlive: isSessionProcess)
         refreshAccount()
-        // Status line data or Claude Code's own usage cache, whichever is newer. After switching
-        // accounts, the old account's limits wait until the new one reports its own.
-        let nextLimits = [LimitsReader.read(paths), cachedLimits]
-            .compactMap { $0 }
-            .filter { $0.belongs(to: account) }
-            .reduce(nil, RateLimits.newest)
+        let nextLimits = RateLimits.best(LimitsReader.read(paths), cached: cachedLimits, account: account)
         var events: [AppEvent] = []
         let sessionEvents = memory.advance(to: next, isAlive: isProcessAlive)
         if loaded { events += sessionEvents }
@@ -169,6 +185,32 @@ final class AppModel {
         events.forEach(handle)
     }
 
+    private func watchScreenSharing() {
+        if hideWhenSharing, ScreenShare.isAvailable {
+            ScreenShare.observe { [weak self] in self?.recheckScreenSharing() }
+        }
+        recheckScreenSharing()
+    }
+
+    private func recheckScreenSharing() {
+        let shared = hideWhenSharing && ScreenShare.isActive
+        if screenShared != shared { screenShared = shared }
+    }
+
+    /// Reads only the log lines added since last time, off the main thread. Runs when the popover
+    /// opens rather than on every log write, so idle Clawdmeter does no work.
+    func refreshSpend() {
+        guard !spendRefreshing else { return }
+        spendRefreshing = true
+        let index = spendIndex
+        Task { [weak self] in
+            let summary = await Task.detached(priority: .utility) { index.refresh() }.value
+            guard let self else { return }
+            spendRefreshing = false
+            if spend != summary { spend = summary }
+        }
+    }
+
     private static func loadShortcut(_ defaults: UserDefaults) -> KeyCombo? {
         if let stored = defaults.string(forKey: "keyCombo") {
             return stored == "off" ? nil : (try? JSONDecoder().decode(KeyCombo.self, from: Data(stored.utf8))) ?? .default
@@ -191,6 +233,7 @@ final class AppModel {
         accountFileModified = modified
         let snapshot = Account.read(paths)
         cachedLimits = snapshot.cachedLimits
+        if plan != snapshot.plan { plan = snapshot.plan }
         let next = snapshot.account
         guard next != account else { return }
         account = next

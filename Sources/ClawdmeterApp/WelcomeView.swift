@@ -152,31 +152,19 @@ private struct KeyCaps: View {
 private struct BigClawd: View {
     let mood: Mood
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var start = Date.now
     private let unit: CGFloat = 3
 
     var body: some View {
-        let animation = MenuBarIcon.animation(mood)
-        let w = unit
-        // The hop plays, then holds for a beat before playing again.
-        let loop = animation.repeats ? animation.total : animation.total + 1.2
-        TimelineView(.periodic(from: start, by: animation.durations.min() ?? 0.25)) { context in
-            let elapsed = context.date.timeIntervalSince(start).truncatingRemainder(dividingBy: loop)
-            let index = reduceMotion ? 0 : animation.frame(at: elapsed)
-            VStack(spacing: w) {
-                Image(nsImage: MenuBarIcon.image(animation.frames[index]))
-                    .resizable()
-                    .interpolation(.none)
-                    .frame(width: w * MenuBarIcon.pointSize.width, height: w * MenuBarIcon.pointSize.height)
-                // A pixel shadow grounds Clawd so the hop reads as a jump.
-                Rectangle()
-                    .fill(Color.primary.opacity(0.08))
-                    .frame(width: w * 20, height: w)
-                    // Under Clawd's body, which sits left of center.
-                    .offset(x: -w * 4.5)
-            }
+        VStack(spacing: unit) {
+            AnimatedClawd(mood: mood, animate: !reduceMotion)
+                .frame(width: unit * MenuBarIcon.pointSize.width, height: unit * MenuBarIcon.pointSize.height)
+            // A pixel shadow grounds Clawd so the hop reads as a jump.
+            Rectangle()
+                .fill(Color.primary.opacity(0.08))
+                .frame(width: unit * 20, height: unit)
+                // Under Clawd's body, which sits left of center.
+                .offset(x: -unit * 4.5)
         }
-        .onChange(of: mood) { start = .now }
         .accessibilityHidden(true)
     }
 }

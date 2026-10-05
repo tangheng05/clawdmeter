@@ -36,7 +36,8 @@ final class StatusItemController {
         popover.animates = false
         popover.contentViewController = hosting
         item.button?.target = self
-        item.button?.action = #selector(toggle)
+        item.button?.action = #selector(clicked)
+        item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         item.button?.imagePosition = .imageLeading
         item.button?.image = MenuBarIcon.blank
         // Resizing the popover while the gear menu is open makes macOS close the menu.
@@ -56,6 +57,7 @@ final class StatusItemController {
             MainActor.assumeIsolated {
                 self?.lastClosed = .now
                 self?.stopWatchingOutsideClicks()
+                self?.model.popoverOpen = false
             }
         }
         model.closePopover = { [weak self] in self?.popover.performClose(nil) }
@@ -103,7 +105,7 @@ final class StatusItemController {
     }
 
     private func update() {
-        _ = (model.installStatus, model.installError, model.updater.available, model.updater.status)
+        _ = (model.installStatus, model.installError, model.updater.available, model.updater.status, model.spend)
         let taken = !hotKey.register(model.shortcut)
         // Only write on change; every write re-triggers this observation.
         if model.shortcutTaken != taken { model.shortcutTaken = taken }
@@ -143,8 +145,6 @@ final class StatusItemController {
         }
     }
 
-    /// Clawd is drawn by a layer whose frames are a Core Animation keyframe animation,
-    /// so the render server drives every mood and this process stays asleep.
     private func restartAnimation() {
         iconLayer?.removeFromSuperlayer()
         iconLayer = nil
@@ -158,29 +158,8 @@ final class StatusItemController {
                 body = NSColor.labelColor.usingColorSpace(.sRGB) ?? .labelColor
             }
         }
-        let animation = MenuBarIcon.animation(state.mood)
-        let frames = animation.frames.compactMap { MenuBarIcon.cgImage($0, body: body, sweat: state.sweating) }
-
-        let layer = CALayer()
+        let layer = MenuBarIcon.layer(state.mood, sweating: state.sweating, animate: state.animate, body: body)
         layer.frame = cell.imageRect(forBounds: button.bounds)
-        layer.contentsGravity = .resizeAspect
-        layer.magnificationFilter = .nearest
-        layer.contents = frames.first
-        layer.opacity = state.mood == .asleep ? 0.7 : 1
-
-        if state.animate, frames.count > 1 {
-            let keyframes = CAKeyframeAnimation(keyPath: "contents")
-            keyframes.values = frames
-            keyframes.calculationMode = .discrete
-            keyframes.duration = animation.total
-            // Each frame holds for its own time, e.g. a long open-eyes pause between blinks.
-            keyframes.keyTimes = Keyframes.discreteTimes(animation.durations).map { NSNumber(value: $0) }
-            keyframes.repeatCount = animation.repeats ? .infinity : 1
-            keyframes.isRemovedOnCompletion = false
-            keyframes.fillMode = .forwards
-            layer.add(keyframes, forKey: "mood")
-        }
-
         button.layer?.addSublayer(layer)
         iconLayer = layer
     }
@@ -188,6 +167,8 @@ final class StatusItemController {
     private func title() -> NSAttributedString {
         let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize - 1, weight: .medium)
         let result = NSMutableAttributedString()
+        // Only Clawd while the screen is shared, so usage never shows up in a meeting.
+        if model.screenShared { return result }
         func append(_ text: String, color: NSColor = .labelColor) {
             let spaced = result.length == 0 ? text : " " + text
             result.append(NSAttributedString(string: spaced, attributes: [.font: font, .foregroundColor: color]))
@@ -203,7 +184,8 @@ final class StatusItemController {
             let used = headline.window.usedPercentage
             // Stays readable when idle: the number holds until the reset, which currentLimits handles.
             let color: NSColor = used >= 90 ? .systemRed : used >= 70 ? .systemOrange : .labelColor
-            append("\(headline.label) \(Int(used.rounded(.down)))%", color: color)
+            append(model.showRemaining ? "\(headline.label) \(remaining(used))% left" : "\(headline.label) \(Int(used.rounded(.down)))%",
+                   color: color)
         }
         return result
     }
@@ -214,7 +196,9 @@ final class StatusItemController {
         if model.sessions.count > 1 { parts.append("\(model.sessions.count) sessions") }
         if let limits = model.currentLimits, let headline = limits.headline {
             let name = headline.label == "wk" ? "Weekly" : "5-hour"
-            parts.append("\(name) limit \(Int(headline.window.usedPercentage.rounded(.down)))% used")
+            let used = headline.window.usedPercentage
+            parts.append(model.showRemaining ? "\(name) limit \(remaining(used))% left"
+                                             : "\(name) limit \(Int(used.rounded(.down)))% used")
         }
         return parts.joined(separator: ". ")
     }
@@ -227,6 +211,36 @@ final class StatusItemController {
         }
     }
 
+    @objc private func clicked() {
+        guard let event = NSApp.currentEvent else { return toggle() }
+        let control = event.type == .leftMouseUp && event.modifierFlags.contains(.control)
+        event.type == .rightMouseUp || control ? showMenu() : toggle()
+    }
+
+    private func showMenu() {
+        popover.performClose(nil)
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Open Clawdmeter", action: #selector(toggle), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
+        menu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "").target = self
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Quit Clawdmeter", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        // Setting the menu only for this click keeps a left click opening the popover.
+        item.menu = menu
+        item.button?.performClick(nil)
+        item.menu = nil
+    }
+
+    @objc private func openSettings() {
+        model.openSettings?()
+    }
+
+    /// The popover shows the result, or the update ready to install.
+    @objc private func checkForUpdates() {
+        Task { await model.updater.check(manual: true) }
+        toggle()
+    }
+
     @objc private func toggle() {
         guard let button = item.button else { return }
         if popover.isShown {
@@ -235,7 +249,9 @@ final class StatusItemController {
             // A click on the icon first closes the popover (it's outside it), then fires this
             // action; reopening right away would make it flicker, so treat it as the close.
             guard Date.now.timeIntervalSince(lastClosed) > 0.3 else { return }
+            model.popoverOpen = true
             model.reload()
+            model.refreshSpend()
             fitPopover()
             // Without this the first click inside the popover only activates the app.
             NSApp.activate()

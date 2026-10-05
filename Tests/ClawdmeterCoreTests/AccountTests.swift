@@ -9,6 +9,22 @@ import Testing
         try dir.write(#"{"oauthAccount":{"accountUuid":"\#(uuid)","emailAddress":"x@y.z"},"other":1}"#, to: ".claude.json")
     }
 
+    @Test func namesThePlan() throws {
+        let dir = try TempDir()
+        func plan(_ type: String, tier: String? = nil) throws -> String? {
+            let tierField = tier.map { #","organizationRateLimitTier":"\#($0)""# } ?? ""
+            try dir.write(#"{"oauthAccount":{"accountUuid":"a","organizationType":"\#(type)"\#(tierField)}}"#, to: ".claude.json")
+            return Account.read(dir.paths).plan
+        }
+        #expect(try plan("claude_pro") == "Pro")
+        #expect(try plan("claude_max", tier: "default_claude_max_5x") == "Max 5x")
+        #expect(try plan("claude_max", tier: "default_claude_max_20x") == "Max 20x")
+        #expect(try plan("claude_max") == "Max")
+        #expect(try plan("claude_team") == "Team")
+        #expect(try plan("claude_enterprise") == "Enterprise")
+        #expect(try plan("something_new") == nil)
+    }
+
     @Test func readsSignedInAccount() throws {
         let dir = try TempDir()
         #expect(Account.current(dir.paths) == nil)

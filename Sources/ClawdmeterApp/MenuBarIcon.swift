@@ -1,4 +1,5 @@
 import AppKit
+import ClawdmeterCore
 
 enum Mood: Equatable {
     case asleep, idle, working, waiting, compacting, done
@@ -42,16 +43,6 @@ enum MenuBarIcon {
         }
 
         var total: TimeInterval { durations.reduce(0, +) }
-
-        /// The frame showing `elapsed` seconds into the animation.
-        func frame(at elapsed: TimeInterval) -> Int {
-            var t = repeats ? elapsed.truncatingRemainder(dividingBy: total) : min(elapsed, total)
-            for (index, duration) in durations.enumerated() {
-                if t < duration { return index }
-                t -= duration
-            }
-            return frames.count - 1
-        }
     }
 
     private static let base = [
@@ -187,12 +178,29 @@ enum MenuBarIcon {
         return image
     }
 
-    /// Static image, for SwiftUI headers and the like.
-    static func image(_ sprite: Sprite? = nil, sweat: Bool = false, orange: Bool = true) -> NSImage {
-        let cg = cgImage(sprite ?? Sprite(rows: base), body: orange ? claudeOrange : .black, sweat: sweat)
-        let image = cg.map { NSImage(cgImage: $0, size: pointSize) } ?? NSImage(size: pointSize)
-        image.isTemplate = !orange
-        return image
+    /// Clawd as a layer whose frames are a Core Animation keyframe animation, so the render
+    /// server plays every mood and this process stays asleep.
+    static func layer(_ mood: Mood, sweating: Bool, animate: Bool, body: NSColor = claudeOrange) -> CALayer {
+        let animation = animation(mood)
+        let frames = animation.frames.compactMap { cgImage($0, body: body, sweat: sweating) }
+        let layer = CALayer()
+        layer.contentsGravity = .resizeAspect
+        layer.magnificationFilter = .nearest
+        layer.contents = frames.first
+        layer.opacity = mood == .asleep ? 0.7 : 1
+        guard animate, frames.count > 1 else { return layer }
+
+        let keyframes = CAKeyframeAnimation(keyPath: "contents")
+        keyframes.values = frames
+        keyframes.calculationMode = .discrete
+        keyframes.duration = animation.total
+        // Each frame holds for its own time, e.g. a long open-eyes pause between blinks.
+        keyframes.keyTimes = Keyframes.discreteTimes(animation.durations).map { NSNumber(value: $0) }
+        keyframes.repeatCount = animation.repeats ? .infinity : 1
+        keyframes.isRemovedOnCompletion = false
+        keyframes.fillMode = .forwards
+        layer.add(keyframes, forKey: "mood")
+        return layer
     }
 
     /// Same footprint as a frame; the visible icon is drawn by a layer on top.

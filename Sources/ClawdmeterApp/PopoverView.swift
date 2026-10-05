@@ -5,12 +5,26 @@ struct PopoverView: View {
     @Bindable var model: AppModel
 
     var body: some View {
+        if model.popoverOpen {
+            content
+        } else {
+            Color.clear.frame(width: 320, height: 1)
+        }
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
-            LimitsSection(limits: model.currentLimits, dailyUsage: model.dailyUsage)
+            LimitsSection(limits: model.currentLimits, dailyUsage: model.dailyUsage, showRemaining: $model.showRemaining)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
+            if let spend = model.spend, spend.last30.tokens > 0 {
+                Divider()
+                SpendSection(spend: spend)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+            }
             Divider()
             SessionsSection(sessions: model.sessions, onSelect: model.focus)
             if !(model.installStatus.statusline && model.installStatus.hooks) || model.installError != nil {
@@ -32,6 +46,15 @@ struct PopoverView: View {
             ClawdView(mood: model.mood, sweating: model.sweating, animate: model.animate)
             Text(headline).font(.system(size: 13, weight: .semibold))
             Spacer()
+            if let plan = model.plan {
+                Text(plan)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(Color.primary.opacity(0.07)))
+                    .help("Your Claude plan")
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 11)
@@ -70,6 +93,11 @@ struct PopoverView: View {
 }
 
 /// Neutral until a limit gets close, so color always means "watch out".
+/// Whole percent left, rounded the same way as the used figure so the two add up to 100.
+func remaining(_ used: Double) -> Int {
+    max(0, 100 - Int(used.rounded(.down)))
+}
+
 func usageColor(_ used: Double) -> Color {
     if used >= 90 { return .red }
     if used >= 70 { return .orange }
@@ -79,13 +107,16 @@ func usageColor(_ used: Double) -> Color {
 private struct LimitsSection: View {
     let limits: RateLimits?
     let dailyUsage: [UsageHistory.Day]
+    @Binding var showRemaining: Bool
 
     var body: some View {
         if let limits {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top, spacing: 20) {
-                    Meter(title: "5-hour", window: limits.fiveHour, resetStyle: .countdown, period: 5 * 3600)
-                    Meter(title: "Weekly", window: limits.sevenDay, resetStyle: .clock, period: 7 * 86_400)
+                    Meter(title: "5-hour", window: limits.fiveHour, resetStyle: .countdown, period: 5 * 3600,
+                          showRemaining: $showRemaining)
+                    Meter(title: "Weekly", window: limits.sevenDay, resetStyle: .clock, period: 7 * 86_400,
+                          showRemaining: $showRemaining)
                 }
                 WeekChart(dailyUsage: dailyUsage)
                 if limits.isStale() {
@@ -102,6 +133,53 @@ private struct LimitsSection: View {
     }
 }
 
+/// What the local logs would cost at API prices, as a sense of what the plan is worth.
+private struct SpendSection: View {
+    let spend: SpendSummary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("API value").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 0) {
+                tile("Today", spend.today)
+                tile("Yesterday", spend.yesterday)
+                tile("30 days", spend.last30)
+            }
+        }
+        .help(spend.hasUnpriced
+              ? "What these tokens would cost at API prices. Some models have no known price yet, so the real value is higher."
+              : "What these tokens would cost at API prices. Your plan covers them.")
+    }
+
+    private func tile(_ title: String, _ day: DayTotal) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.system(size: 10)).foregroundStyle(.tertiary)
+            Text(dollars(day.cost) + (day.unpricedTokens > 0 ? "+" : ""))
+                .font(.system(size: 15, weight: .semibold).monospacedDigit())
+            Text("\(tokenCount(day.tokens)) tokens")
+                .font(.system(size: 10).monospacedDigit()).foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+func dollars(_ value: Double) -> String {
+    value.formatted(.currency(code: "USD").precision(.fractionLength(value >= 1000 ? 0 : 2)))
+}
+
+/// "950", "45K", "3.1M", "1.2B".
+func tokenCount(_ count: Int) -> String {
+    let value = Double(count)
+    // Each unit starts where the one below would round up to 1,000.
+    switch value {
+    case 999_950_000...: return (value / 1e9).formatted(.number.precision(.fractionLength(0...1))) + "B"
+    case 999_950...: return (value / 1e6).formatted(.number.precision(.fractionLength(0...1))) + "M"
+    case 999.5...: return (value / 1e3).formatted(.number.precision(.fractionLength(0))) + "K"
+    default: return "\(count)"
+    }
+}
+
 private struct Meter: View {
     enum ResetStyle { case countdown, clock }
 
@@ -109,14 +187,29 @@ private struct Meter: View {
     let window: LimitWindow?
     let resetStyle: ResetStyle
     let period: TimeInterval
+    @Binding var showRemaining: Bool
+
+    /// What the number and bar show; the color always follows what's used.
+    private var shown: Double? {
+        window.map { showRemaining ? Double(remaining($0.usedPercentage)) : $0.usedPercentage.rounded(.down) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(title).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
-            Text(window.map { "\(Int($0.usedPercentage.rounded(.down)))%" } ?? "–")
-                .font(.system(size: 26, weight: .semibold).monospacedDigit())
-                .foregroundStyle(usageColor(window?.usedPercentage ?? 0))
-                .contentTransition(.numericText())
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(shown.map { "\(Int($0))%" } ?? "–")
+                    .font(.system(size: 26, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(usageColor(window?.usedPercentage ?? 0))
+                    .contentTransition(.numericText())
+                if showRemaining, window != nil {
+                    Text("left").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { showRemaining.toggle() }
+            .accessibilityAddTraits(.isButton)
+            .help(showRemaining ? "Click to show how much is used" : "Click to show how much is left")
             bar
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 VStack(alignment: .leading, spacing: 3) {
@@ -133,7 +226,7 @@ private struct Meter: View {
     }
 
     private var bar: some View {
-        let fraction = min(max((window?.usedPercentage ?? 0) / 100, 0), 1)
+        let fraction = min(max((shown ?? 0) / 100, 0), 1)
         return GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(.quaternary)
@@ -151,7 +244,7 @@ private struct Meter: View {
             Text("Runs out \(resetStyle == .countdown ? at.formatted(date: .omitted, time: .shortened) : dayAndTime(at))")
                 .font(.system(size: 11, weight: .medium)).foregroundStyle(.orange)
         case .onTrack(let projected):
-            Text("On track for \(projected)% at reset")
+            Text(showRemaining ? "\(100 - projected)% left at reset" : "On track for \(projected)% at reset")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
         case nil:
             EmptyView()
@@ -425,18 +518,11 @@ private struct ClawdView: View {
     let mood: Mood
     let sweating: Bool
     let animate: Bool
-    @State private var start = Date.now
 
     var body: some View {
-        let animation = MenuBarIcon.animation(mood)
-        TimelineView(.periodic(from: start, by: animation.durations.min() ?? 0.25)) { context in
-            let index = animate ? animation.frame(at: context.date.timeIntervalSince(start)) : 0
-            Image(nsImage: MenuBarIcon.image(animation.frames[index], sweat: sweating))
-                .interpolation(.none)
-                .opacity(mood == .asleep ? 0.7 : 1)
-                .accessibilityHidden(true)
-        }
-        .onChange(of: mood) { start = .now }
+        AnimatedClawd(mood: mood, sweating: sweating, animate: animate)
+            .frame(width: MenuBarIcon.pointSize.width, height: MenuBarIcon.pointSize.height)
+            .accessibilityHidden(true)
     }
 }
 

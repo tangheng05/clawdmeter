@@ -40,6 +40,8 @@ public struct AccountSnapshot: Equatable, Sendable {
     public let account: String?
     /// Claude Code's own cached usage, shared by the terminal and the VS Code extension.
     public let cachedLimits: RateLimits?
+    /// "Pro", "Max 5x" and so on, when Claude Code knows the subscription.
+    public var plan: String? = nil
 }
 
 public enum Account {
@@ -52,8 +54,22 @@ public enum Account {
               let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
             return AccountSnapshot(account: nil, cachedLimits: nil)
         }
-        let account = (json["oauthAccount"] as? [String: Any])?["accountUuid"] as? String
-        return AccountSnapshot(account: account, cachedLimits: cachedLimits(json["cachedUsageUtilization"]))
+        let oauth = json["oauthAccount"] as? [String: Any]
+        return AccountSnapshot(account: oauth?["accountUuid"] as? String,
+                               cachedLimits: cachedLimits(json["cachedUsageUtilization"]),
+                               plan: oauth.flatMap(plan))
+    }
+
+    private static func plan(_ oauth: [String: Any]) -> String? {
+        switch oauth["organizationType"] as? String {
+        case "claude_pro": return "Pro"
+        case "claude_team": return "Team"
+        case "claude_enterprise": return "Enterprise"
+        case "claude_max":
+            let tier = [oauth["organizationRateLimitTier"], oauth["userRateLimitTier"]].compactMap { $0 as? String }.joined()
+            return tier.contains("20x") ? "Max 20x" : tier.contains("5x") ? "Max 5x" : "Max"
+        default: return nil
+        }
     }
 
     private static func cachedLimits(_ value: Any?) -> RateLimits? {

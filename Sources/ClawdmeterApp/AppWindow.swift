@@ -51,5 +51,10 @@ final class AppWindow: NSObject, NSWindowDelegate {
         Self.openCount = max(0, Self.openCount - 1)
         if Self.openCount == 0 { NSApp.setActivationPolicy(.accessory) }
         onClose?()
+        // A closed window's views would keep updating with the model, so build it fresh next time.
+        DispatchQueue.main.async { [weak self] in
+            guard self?.isOpen == false else { return }
+            self?.window = nil
+        }
     }
 }

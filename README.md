@@ -17,7 +17,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/hero-dark.png">
-  <img src="assets/hero-light.png" alt="Clawdmeter in the menu bar, with its popover open showing usage limits and three Claude Code sessions" width="760">
+  <img src="assets/hero-light.png" alt="Clawdmeter in the menu bar, with its popover open showing usage limits, their API value and three Claude Code sessions" width="760">
 </picture>
 
 ## Install
@@ -62,15 +62,17 @@ Next to Clawd, `wk 86%` is the usage limit closest to running out. It turns ambe
 
 ## What you can do
 
-- **See your limits.** Click Clawd (or press **⌃⌥⌘C**) for your 5-hour and weekly usage, when each resets, and whether you're on pace to run out.
+- **See your limits.** Click Clawd (or press **⌃⌥⌘C**) for your 5-hour and weekly usage, when each resets, and whether you're on pace to run out. Click a percentage to see what's left instead.
+- **See what your plan is worth.** What today's, yesterday's and the last 30 days' tokens would cost at API prices, worked out from Claude Code's logs on your Mac.
 - **Keep track of every session.** Each one shows its folder, branch, what Claude is doing and how full its context is. Click it to jump straight to its terminal or editor.
 - **Get notified** when a long task finishes, a session needs your answer, or a limit gets close.
-- **Make it yours** in Settings (the gear, or ⌘,): what shows in the menu bar, which notifications you get, and your own keyboard shortcut.
+- **Make it yours** in Settings (the gear, ⌘, or right-click Clawd): what shows in the menu bar, which notifications you get, and your own keyboard shortcut.
+- **Use it from scripts and agents.** `~/.claude/clawdmeter/bin/clawdmeter limits` prints your limits as JSON, and `… spend` prints the API value.
 
 ## Good to know
 
-- **Private.** Everything stays on your Mac and it uses no Claude tokens. It only goes online to check for updates once a day.
-- **Light.** Clawd uses close to 0% CPU, even while it moves.
+- **Private.** Everything stays on your Mac and it uses no Claude tokens. It only goes online to check for updates once a day. Sharing your screen? Turn on **Hide usage while sharing your screen** in Settings.
+- **Light.** Clawd uses close to 0% CPU and about 20 MB of memory, even while it moves.
 - **Updates itself.** When a new version is out, click **Update** in the popover. With Homebrew, run `brew upgrade clawdmeter`.
 - **Connects to Claude Code** by adding a status line and a few hooks to `~/.claude/settings.json`, after saving a backup. Your own status line keeps working.
 - **Works in the terminal and in VS Code.** Usage limits refresh from terminal sessions, and they need a Claude subscription login, not an API key.
