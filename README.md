@@ -22,7 +22,15 @@
 
 ## Install
 
-You need **macOS 26 or later** and [Claude Code](https://claude.com/claude-code). Open **Terminal**, paste this, and press Return:
+You need **macOS 26 or later** and [Claude Code](https://claude.com/claude-code).
+
+**Homebrew**
+
+```sh
+brew install --cask tangheng05/tap/clawdmeter
+```
+
+**No Homebrew?** Open **Terminal**, paste this, and press Return:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/tangheng05/clawdmeter/main/install.sh | sh
@@ -33,7 +41,7 @@ Clawd appears in your menu bar, and a short welcome screen helps you finish sett
 <details>
 <summary>Other ways to install</summary>
 
-**Homebrew:** `brew install --cask tangheng05/tap/clawdmeter`. Already installed it another way? Add `--adopt` so Homebrew takes over your existing copy.
+**Already installed it another way?** Add `--adopt` to the Homebrew command so Homebrew takes over your existing copy.
 
 **Download:** get **Clawdmeter.zip** from the [latest release](https://github.com/tangheng05/clawdmeter/releases/latest) and drag the app into Applications. The first time you open it, macOS blocks it because this free app isn't registered with Apple: go to **System Settings → Privacy & Security** and click **Open Anyway**.
 
