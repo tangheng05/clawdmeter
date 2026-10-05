@@ -112,8 +112,8 @@ public struct Installer: Sendable {
         }
 
         try writeSettings(settings, replacing: original)
-        // The helper and usage history stay: open sessions still call the helper until restarted.
-        for file in [paths.hooksDir, paths.limitsFile, paths.contextDir, paths.previousStatuslineFile] {
+        // Usage data, history and the helper stay: they're still valid, and open sessions call the helper until restarted.
+        for file in [paths.hooksDir, paths.previousStatuslineFile] {
             try? FileManager.default.removeItem(at: file)
         }
     }

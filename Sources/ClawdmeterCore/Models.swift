@@ -72,6 +72,13 @@ public struct RateLimits: Equatable, Sendable {
         self.account = account
     }
 
+    /// Whichever source reported most recently.
+    public static func newest(_ a: RateLimits?, _ b: RateLimits?) -> RateLimits? {
+        guard let a else { return b }
+        guard let b else { return a }
+        return b.updatedAt > a.updatedAt ? b : a
+    }
+
     /// After switching accounts, the old account's limits must not be shown as the new one's.
     public func belongs(to current: String?) -> Bool {
         account == nil || current == nil || account == current

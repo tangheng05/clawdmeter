@@ -82,6 +82,7 @@ final class AppModel {
     @ObservationIgnored private var resetTimer: Timer?
     @ObservationIgnored private lazy var history = UsageHistory(file: historyFile(for: nil))
     @ObservationIgnored private var account: String?
+    @ObservationIgnored private var cachedLimits: RateLimits?
     @ObservationIgnored private var accountFileModified: Date?
 
     init() {
@@ -138,8 +139,12 @@ final class AppModel {
                                        transcript: { [transcripts] in transcripts.context(forSession: $0, windows: windows) },
                                        isAlive: isSessionProcess)
         refreshAccount()
-        // After switching accounts, the old account's limits wait until the new one reports its own.
-        let nextLimits = LimitsReader.read(paths).flatMap { $0.belongs(to: account) ? $0 : nil }
+        // Status line data or Claude Code's own usage cache, whichever is newer. After switching
+        // accounts, the old account's limits wait until the new one reports its own.
+        let nextLimits = [LimitsReader.read(paths), cachedLimits]
+            .compactMap { $0 }
+            .filter { $0.belongs(to: account) }
+            .reduce(nil, RateLimits.newest)
         var events: [AppEvent] = []
         let sessionEvents = memory.advance(to: next, isAlive: isProcessAlive)
         if loaded { events += sessionEvents }
@@ -184,7 +189,9 @@ final class AppModel {
         let modified = (try? FileManager.default.attributesOfItem(atPath: paths.accountFile.path))?[.modificationDate] as? Date
         guard modified != accountFileModified || modified == nil else { return }
         accountFileModified = modified
-        let next = Account.current(paths)
+        let snapshot = Account.read(paths)
+        cachedLimits = snapshot.cachedLimits
+        let next = snapshot.account
         guard next != account else { return }
         account = next
         let file = historyFile(for: next)

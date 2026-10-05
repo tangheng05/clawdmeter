@@ -180,6 +180,5 @@ import Testing
         try installer.uninstall()
         #expect(FileManager.default.isExecutableFile(atPath: dir.paths.helperPath.path))
         #expect(FileManager.default.fileExists(atPath: dir.paths.appDir.appending(path: "history.json").path))
-        #expect(!FileManager.default.fileExists(atPath: dir.paths.limitsFile.path))
     }
 }
