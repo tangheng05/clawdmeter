@@ -1,10 +1,12 @@
-/// The working Clawd from Claude's own animation, at one Retina pixel per cell.
-enum WorkingClawd {
+/// Clawd in the style of Claude's own animation, drawn at 1 pt per cell.
+enum ClawdArt {
     /// Fidgets, pulls out a pencil, thinks, turns and scribbles, then cheers.
-    static let sequence = [rest, breathe, reach1, reach2, reach3, pencilUp, pencilOut, think1, think2, windUp1, windUp2,
+    static let working = [rest, breathe, reach1, reach2, reach3, pencilUp, pencilOut, think1, think2, windUp1, windUp2,
                            turn, write1, write2, write3, write4, write5, write6, write3, write4, write5, write6, write7, cheer]
-    static let durations: [Double] = [0.5, 0.3, 0.15, 0.15, 0.3, 0.4, 0.4, 0.3, 0.3, 0.2, 0.2, 0.2, 0.2, 0.15, 0.15,
+    static let workingDurations: [Double] = [0.5, 0.3, 0.15, 0.15, 0.3, 0.4, 0.4, 0.3, 0.3, 0.2, 0.2, 0.2, 0.2, 0.15, 0.15,
                                       0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.3, 0.5]
+    /// Slumped with eyes shut, breathing slowly while z's drift up.
+    static let sleeping = [sleep1, sleep2]
 
     static let rest = [
         "..................................",
@@ -505,5 +507,55 @@ enum WorkingClawd {
         ".....oX..XX....XX..XX.............",
         ".....oX..XX....XX..XX.............",
         ".....oX..XX....XX..XX.............",
+    ]
+    static let sleep1 = [
+        "..................................",
+        "..................................",
+        "..................................",
+        "..................................",
+        "...........................zzzz...",
+        "..............................z...",
+        ".............................z....",
+        ".......................zzz..z.....",
+        ".........................z.zzzz...",
+        "....XXXXXXXXXXXXXXXX....z.........",
+        "....XXXXXXXXXXXXXXXX...zzz........",
+        "....XXXXXXXXXXXXXXXX..............",
+        "....XXXXXXXXXXXXXXXX..............",
+        "....XXeeXXXXXXXXeeXX..............",
+        ".XXXXXXXXXXXXXXXXXXXXXX...........",
+        ".XXXXXXXXXXXXXXXXXXXXXX...........",
+        ".XXXXXXXXXXXXXXXXXXXXXX...........",
+        "....XXXXXXXXXXXXXXXX..............",
+        "....XXXXXXXXXXXXXXXX..............",
+        "....XX..XX....XX..XX..............",
+        "....XX..XX....XX..XX..............",
+        "..................................",
+        "..................................",
+    ]
+    static let sleep2 = [
+        "..................................",
+        "..................................",
+        "..................................",
+        "..................................",
+        "..................................",
+        ".........................zzz......",
+        "...........................z......",
+        "..........................z.......",
+        "....XXXXXXXXXXXXXXXX.....zzz......",
+        "....XXXXXXXXXXXXXXXX..............",
+        "....XXXXXXXXXXXXXXXX..............",
+        "....XXXXXXXXXXXXXXXX..............",
+        "....XXeeXXXXXXXXeeXX..............",
+        "....XXXXXXXXXXXXXXXX..............",
+        ".XXXXXXXXXXXXXXXXXXXXXX...........",
+        ".XXXXXXXXXXXXXXXXXXXXXX...........",
+        ".XXXXXXXXXXXXXXXXXXXXXX...........",
+        "....XXXXXXXXXXXXXXXX..............",
+        "....XXXXXXXXXXXXXXXX..............",
+        "....XX..XX....XX..XX..............",
+        "....XX..XX....XX..XX..............",
+        "..................................",
+        "..................................",
     ]
 }

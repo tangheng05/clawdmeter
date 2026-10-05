@@ -22,7 +22,7 @@ enum MenuBarIcon {
         /// Cell size and grid origin in pixels of the 2x image.
         var cell: (width: Int, height: Int) { fine ? (2, 2) : (3, 6) }
         /// Centers the body on the menu bar text; the tallest poses lose a row or two at the top.
-        var origin: (x: Int, y: Int) { fine ? (3, -8) : (0, -5) }
+        var origin: (x: Int, y: Int) { fine ? (3, -8) : (0, -4) }
         /// A teardrop beside Clawd's head, narrow on top, in cells.
         var drop: [CGRect] {
             fine ? [CGRect(x: 22, y: 5, width: 1, height: 2), CGRect(x: 21, y: 7, width: 3, height: 3)]
@@ -114,37 +114,17 @@ enum MenuBarIcon {
         "....X.X....X.X........",
         "......................",
     ]
-    private static let asleep = [
-        "......................",
-        "......................",
-        "...XXXXXXXXXXXX.......",
-        "...XXXXXXXXXXXX.......",
-        ".XXXXXXXXXXXXXXXX.....",
-        "...XXXXXXXXXXXX.......",
-        "....X.X....X.X........",
-        "......................",
-    ]
-    private static let snoring = [
-        "......................",
-        "..................zzz.",
-        "...XXXXXXXXXXXX....z..",
-        "...XXXXXXXXXXXX...zzz.",
-        ".XXXXXXXXXXXXXXXX.....",
-        "...XXXXXXXXXXXX.......",
-        "....X.X....X.X........",
-        "......................",
-    ]
 
     static func animation(_ mood: Mood) -> Animation {
         switch mood {
         case .asleep:
-            Animation([asleep, snoring], durations: [1.6, 1.6], repeats: true)
+            Animation(ClawdArt.sleeping, fine: true, durations: [1.6, 1.6], repeats: true)
         case .idle:
             // A blink every few seconds, with an occasional double blink.
             Animation([base, blink, base, blink, base, blink],
                       durations: [3.6, 0.14, 4.2, 0.12, 0.18, 0.12], repeats: true)
         case .working:
-            Animation(WorkingClawd.sequence, fine: true, durations: WorkingClawd.durations, repeats: true)
+            Animation(ClawdArt.working, fine: true, durations: ClawdArt.workingDurations, repeats: true)
         case .waiting:
             Animation([wave, base], durations: [0.35, 0.35], repeats: true)
         case .compacting:
