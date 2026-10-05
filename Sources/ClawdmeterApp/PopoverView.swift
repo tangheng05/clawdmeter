@@ -429,10 +429,9 @@ private struct ClawdView: View {
 
     var body: some View {
         let animation = MenuBarIcon.animation(mood)
-        let frames = animation.frames.map { sweating ? MenuBarIcon.withSweat($0) : $0 }
         TimelineView(.periodic(from: start, by: animation.durations.min() ?? 0.25)) { context in
             let index = animate ? animation.frame(at: context.date.timeIntervalSince(start)) : 0
-            Image(nsImage: MenuBarIcon.image(frames[index]))
+            Image(nsImage: MenuBarIcon.image(animation.frames[index], sweat: sweating))
                 .interpolation(.none)
                 .opacity(mood == .asleep ? 0.7 : 1)
                 .accessibilityHidden(true)

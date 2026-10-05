@@ -45,7 +45,7 @@ Clawd acts out what Claude is doing, so you can tell at a glance.
 
 <table>
   <tr>
-    <td align="center" width="25%"><img src="assets/moods/working.png" width="88" alt="Clawd scuttling"><br><b>Working</b><br>Scuttles</td>
+    <td align="center" width="25%"><img src="assets/moods/working.png" width="88" alt="Clawd thinking and scribbling"><br><b>Working</b><br>Thinks and scribbles</td>
     <td align="center" width="25%"><img src="assets/moods/waiting.png" width="88" alt="Clawd waving its claws"><br><b>Needs you</b><br>Waves, with a yellow dot</td>
     <td align="center" width="25%"><img src="assets/moods/compacting.png" width="88" alt="Clawd squishing"><br><b>Compacting</b><br>Squishes down</td>
     <td align="center" width="25%"><img src="assets/moods/done.png" width="88" alt="Clawd hopping"><br><b>Done</b><br>Hops when a longer task ends</td>

@@ -153,38 +153,27 @@ private struct BigClawd: View {
     let mood: Mood
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var start = Date.now
-    private let unit: CGFloat = 5
+    private let unit: CGFloat = 3
 
     var body: some View {
         let animation = MenuBarIcon.animation(mood)
-        let w = unit * MenuBarIcon.cell.width, h = unit * MenuBarIcon.cell.height
+        let w = unit
         // The hop plays, then holds for a beat before playing again.
         let loop = animation.repeats ? animation.total : animation.total + 1.2
         TimelineView(.periodic(from: start, by: animation.durations.min() ?? 0.25)) { context in
             let elapsed = context.date.timeIntervalSince(start).truncatingRemainder(dividingBy: loop)
             let index = reduceMotion ? 0 : animation.frame(at: elapsed)
-            VStack(spacing: h * 0.4) {
-                Canvas { context, _ in
-                    for (y, row) in animation.frames[index].enumerated() {
-                        for (x, char) in row.enumerated() {
-                            let color: Color? = switch char {
-                            case "X": Color(nsColor: MenuBarIcon.claudeOrange)
-                            case "z": Color(nsColor: MenuBarIcon.claudeOrange).opacity(0.6)
-                            case "d": Color(nsColor: MenuBarIcon.dropBlue)
-                            default: nil
-                            }
-                            guard let color else { continue }
-                            context.fill(Path(CGRect(x: CGFloat(x) * w, y: CGFloat(y) * h, width: w, height: h)),
-                                         with: .color(color))
-                        }
-                    }
-                }
-                .frame(width: w * 22, height: h * 8)
+            VStack(spacing: w) {
+                Image(nsImage: MenuBarIcon.image(animation.frames[index]))
+                    .resizable()
+                    .interpolation(.none)
+                    .frame(width: w * MenuBarIcon.pointSize.width, height: w * MenuBarIcon.pointSize.height)
                 // A pixel shadow grounds Clawd so the hop reads as a jump.
                 Rectangle()
                     .fill(Color.primary.opacity(0.08))
-                    .frame(width: w * 14, height: h * 0.3)
-                    .offset(x: -w * 2)
+                    .frame(width: w * 20, height: w)
+                    // Under Clawd's body, which sits left of center.
+                    .offset(x: -w * 4.5)
             }
         }
         .onChange(of: mood) { start = .now }

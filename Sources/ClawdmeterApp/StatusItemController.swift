@@ -159,9 +159,7 @@ final class StatusItemController {
             }
         }
         let animation = MenuBarIcon.animation(state.mood)
-        let frames = animation.frames
-            .map { state.sweating ? MenuBarIcon.withSweat($0) : $0 }
-            .compactMap { MenuBarIcon.cgImage($0, body: body) }
+        let frames = animation.frames.compactMap { MenuBarIcon.cgImage($0, body: body, sweat: state.sweating) }
 
         let layer = CALayer()
         layer.frame = cell.imageRect(forBounds: button.bounds)
@@ -176,11 +174,7 @@ final class StatusItemController {
             keyframes.calculationMode = .discrete
             keyframes.duration = animation.total
             // Each frame holds for its own time, e.g. a long open-eyes pause between blinks.
-            var start = 0.0
-            keyframes.keyTimes = animation.durations.map { duration in
-                defer { start += duration }
-                return NSNumber(value: start / animation.total)
-            }
+            keyframes.keyTimes = Keyframes.discreteTimes(animation.durations).map { NSNumber(value: $0) }
             keyframes.repeatCount = animation.repeats ? .infinity : 1
             keyframes.isRemovedOnCompletion = false
             keyframes.fillMode = .forwards
