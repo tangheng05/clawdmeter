@@ -3,9 +3,11 @@ import SwiftUI
 
 struct PopoverView: View {
     @Bindable var model: AppModel
+    /// While closed, the popover renders nothing, so its timers don't run unseen.
+    var visible = true
 
     var body: some View {
-        if model.popoverOpen {
+        if visible {
             content
         } else {
             Color.clear.frame(width: 320, height: 1)

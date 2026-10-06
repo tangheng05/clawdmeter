@@ -22,8 +22,6 @@ final class AppModel {
     var accountExpanded = false
     /// True while the screen is being shared and usage should stay out of the menu bar.
     private(set) var screenShared = false
-    /// While closed, the popover renders nothing, so its animation and timers don't run unseen.
-    var popoverOpen = false
     /// Bumped when a limit window resets, so time-based views refresh.
     private var resetTick = 0
 

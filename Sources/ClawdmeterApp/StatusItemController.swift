@@ -30,7 +30,7 @@ final class StatusItemController {
 
     init(model: AppModel) {
         self.model = model
-        hosting = NSHostingController(rootView: PopoverView(model: model))
+        hosting = NSHostingController(rootView: PopoverView(model: model, visible: false))
         hosting.sizingOptions = []
         popover.behavior = .transient
         popover.animates = false
@@ -57,7 +57,7 @@ final class StatusItemController {
             MainActor.assumeIsolated {
                 self?.lastClosed = .now
                 self?.stopWatchingOutsideClicks()
-                self?.model.popoverOpen = false
+                self?.setPopoverContent(visible: false)
                 self?.model.accountExpanded = false
             }
         }
@@ -116,7 +116,7 @@ final class StatusItemController {
     }
 
     private func fitPopover() {
-        guard !menuOpen else { return }
+        guard !menuOpen, hosting.rootView.visible else { return }
         let size = hosting.sizeThatFits(in: NSSize(width: 320, height: 10_000))
         if popover.contentSize != size { popover.contentSize = size }
     }
@@ -251,7 +251,7 @@ final class StatusItemController {
             // A click on the icon first closes the popover (it's outside it), then fires this
             // action; reopening right away would make it flicker, so treat it as the close.
             guard Date.now.timeIntervalSince(lastClosed) > 0.3 else { return }
-            model.popoverOpen = true
+            setPopoverContent(visible: true)
             model.reload()
             model.refreshSpend()
             fitPopover()
@@ -260,7 +260,16 @@ final class StatusItemController {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
             watchOutsideClicks()
+            // In case SwiftUI settles on a different size after the first layout.
+            DispatchQueue.main.async { self.fitPopover() }
         }
+    }
+
+    /// Set on the hosting view directly, so the next measurement already sees the new content.
+    /// Through the model the switch landed a moment later, and a reopened popover was sized empty.
+    private func setPopoverContent(visible: Bool) {
+        guard hosting.rootView.visible != visible else { return }
+        hosting.rootView = PopoverView(model: model, visible: visible)
     }
 
     /// After the gear menu closes, the popover is no longer key and `.transient` stops
