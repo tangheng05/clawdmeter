@@ -25,6 +25,17 @@ import Testing
         #expect(try plan("something_new") == nil)
     }
 
+    @Test func namesWhoIsSignedIn() throws {
+        let dir = try TempDir()
+        try dir.write(#"{"oauthAccount":{"accountUuid":"a","emailAddress":"me@example.com","organizationType":"claude_pro","organizationName":"me@example.com's Organization"}}"#, to: ".claude.json")
+        #expect(Account.read(dir.paths).email == "me@example.com")
+        // A personal plan's organization just repeats the email.
+        #expect(Account.read(dir.paths).organization == nil)
+
+        try dir.write(#"{"oauthAccount":{"accountUuid":"a","emailAddress":"me@acme.com","organizationType":"claude_team","organizationName":"Acme"}}"#, to: ".claude.json")
+        #expect(Account.read(dir.paths).organization == "Acme")
+    }
+
     @Test func readsSignedInAccount() throws {
         let dir = try TempDir()
         #expect(Account.current(dir.paths) == nil)

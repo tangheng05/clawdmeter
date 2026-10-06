@@ -58,6 +58,7 @@ final class StatusItemController {
                 self?.lastClosed = .now
                 self?.stopWatchingOutsideClicks()
                 self?.model.popoverOpen = false
+                self?.model.accountExpanded = false
             }
         }
         model.closePopover = { [weak self] in self?.popover.performClose(nil) }
@@ -105,7 +106,8 @@ final class StatusItemController {
     }
 
     private func update() {
-        _ = (model.installStatus, model.installError, model.updater.available, model.updater.status, model.spend)
+        _ = (model.installStatus, model.installError, model.updater.available, model.updater.status, model.spend,
+             model.accountExpanded)
         let taken = !hotKey.register(model.shortcut)
         // Only write on change; every write re-triggers this observation.
         if model.shortcutTaken != taken { model.shortcutTaken = taken }

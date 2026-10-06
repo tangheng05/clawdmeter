@@ -44,21 +44,33 @@ struct PopoverView: View {
     private var header: some View {
         HStack(spacing: 10) {
             ClawdView(mood: model.mood, sweating: model.sweating, animate: model.animate)
-            Text(headline).font(.system(size: 13, weight: .semibold))
-            Spacer()
-            if let plan = model.plan {
-                Text(plan)
-                    .font(.system(size: 10, weight: .semibold))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(headline).font(.system(size: 13, weight: .semibold))
+                if model.accountExpanded, canShowAccount, let email = model.accountEmail {
+                    // Each on its own line: side by side, a long name would squeeze the email out.
+                    Group {
+                        if let organization = model.accountOrganization { Text(organization) }
+                        Text(email).truncationMode(.middle).help(email)
+                    }
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(Color.primary.opacity(0.07)))
-                    .help("Your Claude plan")
+                    .lineLimit(1)
+                    .textSelection(.enabled)
+                }
+            }
+            Spacer(minLength: 8)
+            if let plan = model.plan {
+                PlanBadge(plan: plan, expanded: model.accountExpanded && canShowAccount, canExpand: canShowAccount) {
+                    model.accountExpanded.toggle()
+                }
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 11)
     }
+
+    /// Never while the screen is shared with usage hidden, so an email can't end up in a meeting.
+    private var canShowAccount: Bool { model.accountEmail != nil && !model.screenShared }
 
     private var headline: String {
         let s = model.sessions
@@ -130,6 +142,33 @@ private struct LimitsSection: View {
                 .font(.system(size: 12)).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+}
+
+/// The plan, which reveals the signed-in account when clicked.
+private struct PlanBadge: View {
+    let plan: String
+    let expanded: Bool
+    let canExpand: Bool
+    let toggle: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: toggle) {
+            Text(plan)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(expanded ? .primary : .secondary)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(Color.primary.opacity(expanded ? 0.14 : hovering && canExpand ? 0.1 : 0.07)))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(!canExpand)
+        .onHover { hovering = $0 }
+        .help(canExpand ? (expanded ? "Hide account" : "Show which account is signed in") : "Your Claude plan")
+        .accessibilityLabel("\(plan) plan")
+        .accessibilityHint(canExpand ? (expanded ? "Hides the account" : "Shows which account is signed in") : "")
     }
 }
 

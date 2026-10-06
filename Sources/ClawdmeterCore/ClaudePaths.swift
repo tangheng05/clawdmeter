@@ -42,6 +42,9 @@ public struct AccountSnapshot: Equatable, Sendable {
     public let cachedLimits: RateLimits?
     /// "Pro", "Max 5x" and so on, when Claude Code knows the subscription.
     public var plan: String? = nil
+    public var email: String? = nil
+    /// Only for team and enterprise plans; a personal plan's organization just repeats the email.
+    public var organization: String? = nil
 }
 
 public enum Account {
@@ -57,7 +60,15 @@ public enum Account {
         let oauth = json["oauthAccount"] as? [String: Any]
         return AccountSnapshot(account: oauth?["accountUuid"] as? String,
                                cachedLimits: cachedLimits(json["cachedUsageUtilization"]),
-                               plan: oauth.flatMap(plan))
+                               plan: oauth.flatMap(plan),
+                               email: oauth?["emailAddress"] as? String,
+                               organization: oauth.flatMap(organization))
+    }
+
+    private static func organization(_ oauth: [String: Any]) -> String? {
+        guard ["claude_team", "claude_enterprise"].contains(oauth["organizationType"] as? String),
+              let name = oauth["organizationName"] as? String, !name.isEmpty else { return nil }
+        return name
     }
 
     private static func plan(_ oauth: [String: Any]) -> String? {

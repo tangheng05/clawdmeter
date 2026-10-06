@@ -16,6 +16,10 @@ final class AppModel {
     private(set) var celebrating = false
     private(set) var spend: SpendSummary?
     private(set) var plan: String?
+    private(set) var accountEmail: String?
+    private(set) var accountOrganization: String?
+    /// The signed-in account shown under the headline, after a click on the plan badge.
+    var accountExpanded = false
     /// True while the screen is being shared and usage should stay out of the menu bar.
     private(set) var screenShared = false
     /// While closed, the popover renders nothing, so its animation and timers don't run unseen.
@@ -234,6 +238,8 @@ final class AppModel {
         let snapshot = Account.read(paths)
         cachedLimits = snapshot.cachedLimits
         if plan != snapshot.plan { plan = snapshot.plan }
+        if accountEmail != snapshot.email { accountEmail = snapshot.email }
+        if accountOrganization != snapshot.organization { accountOrganization = snapshot.organization }
         let next = snapshot.account
         guard next != account else { return }
         account = next
