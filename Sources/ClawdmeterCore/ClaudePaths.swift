@@ -87,6 +87,11 @@ public enum Account {
         guard let cache = value as? [String: Any],
               let fetched = (cache["fetchedAtMs"] as? NSNumber)?.doubleValue,
               let usage = cache["utilization"] as? [String: Any] else { return nil }
+        return usageLimits(usage, fetchedAt: dateFromEpoch(fetched), account: cache["accountUuid"] as? String)
+    }
+
+    /// The usage endpoint's body, which Claude Code also caches as-is.
+    static func usageLimits(_ usage: [String: Any], fetchedAt: Date, account: String?) -> RateLimits? {
         func window(_ key: String) -> LimitWindow? {
             guard let entry = usage[key] as? [String: Any],
                   let used = (entry["utilization"] as? NSNumber)?.doubleValue else { return nil }
@@ -94,8 +99,7 @@ public enum Account {
         }
         let five = window("five_hour"), seven = window("seven_day")
         guard five != nil || seven != nil else { return nil }
-        return RateLimits(fiveHour: five, sevenDay: seven, updatedAt: dateFromEpoch(fetched),
-                          account: cache["accountUuid"] as? String)
+        return RateLimits(fiveHour: five, sevenDay: seven, updatedAt: fetchedAt, account: account)
     }
 
     /// ISO 8601 with up to microseconds, e.g. "2026-10-04T15:59:59.664258+00:00".

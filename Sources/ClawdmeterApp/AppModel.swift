@@ -99,6 +99,9 @@ final class AppModel {
     @ObservationIgnored private lazy var history = UsageHistory(file: historyFile(for: nil))
     @ObservationIgnored private var account: String?
     @ObservationIgnored private var cachedLimits: RateLimits?
+    @ObservationIgnored private var fetchedLimits: RateLimits?
+    @ObservationIgnored private var lastFetch: Date?
+    @ObservationIgnored private var fetchTimer: Timer?
     @ObservationIgnored private var accountFileModified: Date?
     @ObservationIgnored private lazy var spendIndex = SpendIndex(paths: paths)
     @ObservationIgnored private var spendRefreshing = false
@@ -149,6 +152,10 @@ final class AppModel {
             self?.reload()
         }
         reload()
+        // Catches usage from claude.ai and other devices, which nothing on this Mac reports.
+        fetchTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.fetchLimitsIfDue() }
+        }
         watchScreenSharing()
         updater.start()
         // The first read of the logs is the only slow one, so do it before the popover is opened.
@@ -162,7 +169,8 @@ final class AppModel {
                                        transcript: { [transcripts] in transcripts.context(forSession: $0, windows: windows) },
                                        isAlive: isSessionProcess)
         refreshAccount()
-        let nextLimits = RateLimits.best(LimitsReader.read(paths), cached: cachedLimits, account: account)
+        let nextLimits = RateLimits.best(LimitsReader.read(paths), cached: cachedLimits, fetched: fetchedLimits,
+                                         account: account)
         var events: [AppEvent] = []
         let sessionEvents = memory.advance(to: next, isAlive: isProcessAlive)
         if loaded { events += sessionEvents }
@@ -185,6 +193,23 @@ final class AppModel {
         processWatcher?.watch(Set(next.map(\.pid)))
         scheduleResetRefresh()
         events.forEach(handle)
+        fetchLimitsIfDue()
+    }
+
+    /// At most once a minute, and not while the status line is already reporting fresh limits.
+    private func fetchLimitsIfDue(now: Date = .now) {
+        if let lastFetch, now.timeIntervalSince(lastFetch) < 60 { return }
+        if let limits, now.timeIntervalSince(limits.updatedAt) < 60 { return }
+        lastFetch = now
+        let paths = paths, account = account
+        Task { [weak self] in
+            let result = await Task.detached(priority: .utility) {
+                await UsageAPI.fetch(paths: paths, account: account)
+            }.value
+            guard let fetched = result else { return }
+            self?.fetchedLimits = fetched
+            self?.reload()
+        }
     }
 
     private func watchScreenSharing() {

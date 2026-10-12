@@ -32,10 +32,11 @@ public enum LimitsReader {
 }
 
 extension RateLimits {
-    /// Status line data or Claude Code's own usage cache, whichever is newer. After switching
+    /// Status line data, Claude Code's own usage cache or the app's own fetch, whichever is newer. After switching
     /// accounts, the old account's limits wait until the new one reports its own.
-    public static func best(_ status: RateLimits?, cached: RateLimits?, account: String?) -> RateLimits? {
-        [status, cached].compactMap { $0 }.filter { $0.belongs(to: account) }.reduce(nil, newest)
+    public static func best(_ status: RateLimits?, cached: RateLimits?, fetched: RateLimits? = nil,
+                            account: String?) -> RateLimits? {
+        [status, cached, fetched].compactMap { $0 }.filter { $0.belongs(to: account) }.reduce(nil, newest)
     }
 
     public static func best(paths: ClaudePaths) -> RateLimits? {
