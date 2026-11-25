@@ -78,6 +78,13 @@ final class StatusItemController {
         appearanceObservation = item.button?.observe(\.effectiveAppearance) { [weak self] _, _ in
             MainActor.assumeIsolated { self?.restartAnimation() }
         }
+        // macOS reshuffles crowded menu bars when an item's width changes, and a popover stays where it opened.
+        if let itemWindow = item.button?.window {
+            NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification, object: itemWindow,
+                                                   queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.reanchorPopover() }
+            }
+        }
         observe()
         if !UserDefaults.standard.bool(forKey: "didShowWelcome") {
             DispatchQueue.main.async { self.showWelcome() }
@@ -113,7 +120,18 @@ final class StatusItemController {
         // Only write on change; every write re-triggers this observation.
         if model.shortcutTaken != taken { model.shortcutTaken = taken }
         render()
-        if popover.isShown { DispatchQueue.main.async { self.fitPopover() } }
+        if popover.isShown {
+            DispatchQueue.main.async {
+                self.fitPopover()
+                self.reanchorPopover()
+            }
+        }
+    }
+
+    private func reanchorPopover() {
+        guard popover.isShown, let button = item.button, let frame = button.window?.frame,
+              NSScreen.screens.contains(where: { $0.frame.intersects(frame) }) else { return }
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
     }
 
     private func fitPopover() {
