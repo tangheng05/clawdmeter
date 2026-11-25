@@ -25,6 +25,18 @@ func runShell(_ command: String, stdin: Data) -> String? {
     return String(decoding: output, as: UTF8.self)
 }
 
+/// The status line repeats old numbers, so ask Anthropic; falls back to local data when offline.
+func fetchLimits(account: String?) -> RateLimits? {
+    final class Box: @unchecked Sendable { var limits: RateLimits? }
+    let box = Box(), done = DispatchSemaphore(value: 0)
+    Task.detached {
+        if case .limits(let limits) = await UsageAPI.fetch(paths: paths, account: account) { box.limits = limits }
+        done.signal()
+    }
+    done.wait()
+    return box.limits
+}
+
 func printJSON(_ value: some Encodable) {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -50,7 +62,9 @@ case "uninstall":
         exit(1)
     }
 case "limits":
-    printJSON(LimitsReport(limits: RateLimits.best(paths: paths), snapshot: Account.read(paths)))
+    let snapshot = Account.read(paths)
+    printJSON(LimitsReport(limits: RateLimits.best(paths: paths, fetched: fetchLimits(account: snapshot.account)),
+                           snapshot: snapshot))
 case "spend":
     printJSON(SpendIndex(paths: paths).refresh())
 case "accounts":

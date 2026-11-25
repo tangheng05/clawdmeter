@@ -44,9 +44,9 @@ extension RateLimits {
 
     static let trustFetchedFor: TimeInterval = 180
 
-    public static func best(paths: ClaudePaths) -> RateLimits? {
+    public static func best(paths: ClaudePaths, fetched: RateLimits? = nil) -> RateLimits? {
         let snapshot = Account.read(paths)
-        return best(LimitsReader.read(paths), cached: snapshot.cachedLimits, account: snapshot.account)
+        return best(LimitsReader.read(paths), cached: snapshot.cachedLimits, fetched: fetched, account: snapshot.account)
     }
 }
 

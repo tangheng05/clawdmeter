@@ -48,6 +48,18 @@ import Testing
         #expect(old?.fiveHour?.usedPercentage == 17)
     }
 
+    @Test func theCommandLineAlsoPrefersAFreshFetch() throws {
+        let dir = try TempDir()
+        let stamp = Date.now.timeIntervalSince1970
+        try dir.write(#"{"ts":\#(stamp),"account":"a","rate_limits":{"five_hour":{"used_percentage":17}}}"#,
+                      to: "clawdmeter/limits.json")
+        try dir.write(#"{"oauthAccount":{"accountUuid":"a"}}"#, to: ".claude.json")
+        let fetched = RateLimits(fiveHour: LimitWindow(usedPercentage: 25, resetsAt: nil), sevenDay: nil,
+                                 updatedAt: .now.addingTimeInterval(-5), account: "a")
+        #expect(RateLimits.best(paths: dir.paths)?.fiveHour?.usedPercentage == 17)
+        #expect(RateLimits.best(paths: dir.paths, fetched: fetched)?.fiveHour?.usedPercentage == 25)
+    }
+
     @Test func fetchedSourceCountsWhenNewest() {
         func limits(_ used: Double, at ts: Double) -> RateLimits {
             RateLimits(fiveHour: LimitWindow(usedPercentage: used, resetsAt: nil), sevenDay: nil,
