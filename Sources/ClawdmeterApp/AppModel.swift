@@ -206,10 +206,9 @@ final class AppModel {
         fetchLimitsIfDue()
     }
 
-    /// At most once a minute, and not while the status line is already reporting fresh limits.
+    /// At most once a minute. The status line can't be trusted to be current, so it never stands in for this.
     private func fetchLimitsIfDue(now: Date = .now) {
         if let lastFetch, now.timeIntervalSince(lastFetch) < 60 { return }
-        if let limits, now.timeIntervalSince(limits.updatedAt) < 60 { return }
         lastFetch = now
         // Credited to the account it was made for, even if a switch lands meanwhile.
         let paths = paths, account = account, key = activeAccountKey
@@ -375,6 +374,7 @@ final class AppModel {
         let next = snapshot.account
         guard next != account else { return }
         account = next
+        lastFetch = nil
         let file = historyFile(for: next)
         // History from before accounts were tracked belongs to whoever is signed in now.
         let legacy = historyFile(for: nil)

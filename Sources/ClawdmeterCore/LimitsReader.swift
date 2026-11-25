@@ -32,12 +32,17 @@ public enum LimitsReader {
 }
 
 extension RateLimits {
-    /// Status line data, Claude Code's own usage cache or the app's own fetch, whichever is newer. After switching
-    /// accounts, the old account's limits wait until the new one reports its own.
+    /// A recent fetch from Anthropic wins: the status line repeats a session's last-seen numbers with no time
+    /// attached, so they look new even when hours old. Otherwise whichever source is newest.
     public static func best(_ status: RateLimits?, cached: RateLimits?, fetched: RateLimits? = nil,
-                            account: String?) -> RateLimits? {
-        [status, cached, fetched].compactMap { $0 }.filter { $0.belongs(to: account) }.reduce(nil, newest)
+                            account: String?, now: Date = .now) -> RateLimits? {
+        if let fetched, fetched.belongs(to: account), now.timeIntervalSince(fetched.updatedAt) < trustFetchedFor {
+            return fetched
+        }
+        return [status, cached, fetched].compactMap { $0 }.filter { $0.belongs(to: account) }.reduce(nil, newest)
     }
+
+    static let trustFetchedFor: TimeInterval = 180
 
     public static func best(paths: ClaudePaths) -> RateLimits? {
         let snapshot = Account.read(paths)

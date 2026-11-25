@@ -36,6 +36,18 @@ import Testing
         #expect(UsageAPI.token(fromCredentials: credentials(expiresAt: ms - 60_000), now: now) == nil)
     }
 
+    @Test func aRecentFetchBeatsTheStatusLinesRepeatedNumbers() {
+        func limits(_ used: Double, ago: TimeInterval) -> RateLimits {
+            RateLimits(fiveHour: LimitWindow(usedPercentage: used, resetsAt: nil), sevenDay: nil,
+                       updatedAt: now.addingTimeInterval(-ago), account: "a")
+        }
+        // An idle session keeps re-sending what it last saw, stamped as new.
+        let best = RateLimits.best(limits(17, ago: 0), cached: nil, fetched: limits(25, ago: 30), account: "a", now: now)
+        #expect(best?.fiveHour?.usedPercentage == 25)
+        let old = RateLimits.best(limits(17, ago: 0), cached: nil, fetched: limits(25, ago: 600), account: "a", now: now)
+        #expect(old?.fiveHour?.usedPercentage == 17)
+    }
+
     @Test func fetchedSourceCountsWhenNewest() {
         func limits(_ used: Double, at ts: Double) -> RateLimits {
             RateLimits(fiveHour: LimitWindow(usedPercentage: used, resetsAt: nil), sevenDay: nil,
