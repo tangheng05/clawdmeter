@@ -21,6 +21,13 @@ public struct ClaudePaths: Sendable {
     public var limitsFile: URL { appDir.appending(path: "limits.json") }
     public var contextDir: URL { appDir.appending(path: "context") }
     public var windowsFile: URL { appDir.appending(path: "windows.json") }
+    public var pricesFile: URL { appDir.appending(path: "prices.json") }
+
+    /// Claude Code's own default, whose login lives in the "Claude Code-credentials" Keychain item.
+    public var isDefault: Bool {
+        claudeDir.standardizedFileURL == FileManager.default.homeDirectoryForCurrentUser
+            .appending(path: ".claude").standardizedFileURL
+    }
     public var projectsDir: URL { claudeDir.appending(path: "projects") }
     public var binDir: URL { appDir.appending(path: "bin") }
     public var helperPath: URL { binDir.appending(path: "clawdmeter") }
@@ -65,13 +72,13 @@ public enum Account {
                                organization: oauth.flatMap(organization))
     }
 
-    private static func organization(_ oauth: [String: Any]) -> String? {
+    static func organization(_ oauth: [String: Any]) -> String? {
         guard ["claude_team", "claude_enterprise"].contains(oauth["organizationType"] as? String),
               let name = oauth["organizationName"] as? String, !name.isEmpty else { return nil }
         return name
     }
 
-    private static func plan(_ oauth: [String: Any]) -> String? {
+    static func plan(_ oauth: [String: Any]) -> String? {
         switch oauth["organizationType"] as? String {
         case "claude_pro": return "Pro"
         case "claude_team": return "Team"

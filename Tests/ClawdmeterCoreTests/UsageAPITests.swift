@@ -15,6 +15,14 @@ import Testing
         #expect(limits.updatedAt == now)
     }
 
+    @Test func aRejectedLoginIsToldApartFromAnOutage() {
+        let body = Data(#"{"five_hour":{"utilization":5.0,"resets_at":null}}"#.utf8)
+        #expect(UsageAPI.result(status: 401, data: Data(), account: nil, now: now) == .signedOut)
+        #expect(UsageAPI.result(status: 500, data: Data(), account: nil, now: now) == .unavailable)
+        #expect(UsageAPI.result(status: 200, data: body, account: "a", now: now)
+                == .limits(RateLimits(fiveHour: LimitWindow(usedPercentage: 5, resetsAt: nil), sevenDay: nil, updatedAt: now, account: "a")))
+    }
+
     @Test func emptyResponseIsNil() {
         #expect(UsageAPI.parse(Data(#"{"five_hour":null}"#.utf8), account: nil, now: now) == nil)
     }

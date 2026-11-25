@@ -44,6 +44,7 @@ case "uninstall":
     // Used by `brew uninstall --zap`: removes the hooks and status line before the files go.
     do {
         try Installer(paths: paths, helperSource: paths.helperPath).uninstall()
+        AccountSwitcher(paths: paths).forgetAll()
     } catch {
         FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
         exit(1)
@@ -52,7 +53,38 @@ case "limits":
     printJSON(LimitsReport(limits: RateLimits.best(paths: paths), snapshot: Account.read(paths)))
 case "spend":
     printJSON(SpendIndex(paths: paths).refresh())
+case "accounts":
+    struct Row: Encodable { let key: String, email: String?, plan: String?, organization: String?, active: Bool }
+    func fail(_ message: String) -> Never {
+        FileHandle.standardError.write(Data("\(message)\n".utf8))
+        exit(1)
+    }
+    let switcher = AccountSwitcher(paths: paths)
+    guard switcher.isSupported else { fail("Sign in to Claude Code with a claude.ai account first.") }
+    switch args.dropFirst(2).first {
+    case nil:
+        let active = switcher.activeKey()
+        printJSON(switcher.saved().map {
+            Row(key: $0.key, email: $0.email, plan: $0.plan, organization: $0.organization, active: $0.key == active)
+        })
+    case "save":
+        do { try switcher.saveActive() } catch { fail(error.localizedDescription) }
+    case "switch" where args.count >= 4:
+        let wanted = args[3]
+        let matches = switcher.saved().filter { $0.key == wanted || $0.email == wanted }
+        guard matches.count == 1 else {
+            fail(matches.isEmpty ? "No saved account matches \(wanted)." : "Several accounts match; use the key from `clawdmeter accounts`.")
+        }
+        let change: AccountChange?
+        do { change = try switcher.switchTo(matches[0].key) } catch { fail(error.localizedDescription) }
+        guard let change else { break }
+        FileHandle.standardError.write(Data("Switched. Watching for a minute in case a running session writes the old login back…\n".utf8))
+        let reapplied = switcher.guardSwitch(change)
+        if reapplied > 0 { FileHandle.standardError.write(Data("Put it back \(reapplied) time(s) after a renewal.\n".utf8)) }
+    default:
+        fail("usage: clawdmeter accounts [save | switch <email or key>]")
+    }
 default:
-    FileHandle.standardError.write(Data("usage: clawdmeter limits | spend | hook <event> | statusline | uninstall\n".utf8))
+    FileHandle.standardError.write(Data("usage: clawdmeter limits | spend | accounts | hook <event> | statusline | uninstall\n".utf8))
 }
 exit(0)

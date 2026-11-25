@@ -17,6 +17,12 @@ struct PopoverView: View {
     private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
+            if showsAccountList {
+                AccountsSection(model: model)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 8)
+                    .onAppear { model.refreshAccounts() }
+            }
             Divider()
             LimitsSection(limits: model.currentLimits, dailyUsage: model.dailyUsage, showRemaining: $model.showRemaining)
                 .padding(.horizontal, 16)
@@ -48,7 +54,7 @@ struct PopoverView: View {
             ClawdView(mood: model.mood, sweating: model.sweating, animate: model.animate)
             VStack(alignment: .leading, spacing: 2) {
                 Text(headline).font(.system(size: 13, weight: .semibold))
-                if model.accountExpanded, canShowAccount, let email = model.accountEmail {
+                if model.accountExpanded, canShowAccount, !model.accountsSupported, let email = model.accountEmail {
                     // Each on its own line: side by side, a long name would squeeze the email out.
                     Group {
                         if let organization = model.accountOrganization { Text(organization) }
@@ -73,6 +79,8 @@ struct PopoverView: View {
 
     /// Never while the screen is shared with usage hidden, so an email can't end up in a meeting.
     private var canShowAccount: Bool { model.accountEmail != nil && !model.screenShared }
+
+    private var showsAccountList: Bool { model.accountExpanded && canShowAccount && model.accountsSupported }
 
     private var headline: String {
         let s = model.sessions
@@ -147,6 +155,102 @@ private struct LimitsSection: View {
     }
 }
 
+private struct AccountsSection: View {
+    let model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(model.savedAccounts, id: \.key) { login in
+                AccountRow(login: login, active: login.key == model.activeAccountKey,
+                           busy: model.accountBusy == login.key, needsSignIn: model.needsSignIn.contains(login.key),
+                           enabled: model.accountBusy == nil) {
+                    if model.needsSignIn.contains(login.key) {
+                        model.addAccount(login)
+                    } else {
+                        model.switchAccount(login.key)
+                    }
+                } signInAgain: {
+                    model.addAccount(login)
+                } forget: {
+                    model.forgetAccount(login.key)
+                }
+            }
+            Button {
+                model.addAccount()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "plus").frame(width: 14)
+                    Text(model.accountBusy == "add" ? "Finish signing in in your browser…" : "Add account…")
+                    Spacer()
+                    if model.accountBusy == "add" { ProgressView().controlSize(.mini) }
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(model.accountBusy != nil)
+            .help("Sign in to another Claude account in your browser. Clawdmeter keeps it so you can switch back in one click.")
+        }
+    }
+}
+
+private struct AccountRow: View {
+    let login: SavedLogin
+    let active: Bool
+    let busy: Bool
+    let needsSignIn: Bool
+    let enabled: Bool
+    let select: () -> Void
+    let signInAgain: () -> Void
+    let forget: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: select) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 14)
+                    .opacity(active ? 1 : 0)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(login.email ?? "Claude account").lineLimit(1).truncationMode(.middle)
+                    if let organization = login.organization {
+                        Text(organization).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 6)
+                if busy {
+                    ProgressView().controlSize(.mini)
+                } else if needsSignIn {
+                    Text("Sign in again").font(.system(size: 10, weight: .medium)).foregroundStyle(.orange)
+                } else if let plan = login.plan {
+                    Text(plan).font(.system(size: 10)).foregroundStyle(.secondary)
+                }
+            }
+            .font(.system(size: 12))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(hovering && !active ? 0.07 : 0)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled || (active && !needsSignIn))
+        .onHover { hovering = $0 }
+        .help(active ? "Claude Code is signed in to this account" : "Switch Claude Code to this account")
+        .contextMenu {
+            Button("Sign in again…", action: signInAgain)
+            if !active { Button("Forget this account", action: forget) }
+        }
+        .accessibilityLabel(login.email ?? "Claude account")
+        .accessibilityValue([active ? "Signed in" : nil, busy ? "Switching" : nil, needsSignIn ? "Needs signing in again" : nil,
+                             login.organization, login.plan].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityHint(active ? "" : "Switches Claude Code to this account")
+    }
+}
+
 /// The plan, which reveals the signed-in account when clicked.
 private struct PlanBadge: View {
     let plan: String
@@ -168,9 +272,9 @@ private struct PlanBadge: View {
         .buttonStyle(.plain)
         .disabled(!canExpand)
         .onHover { hovering = $0 }
-        .help(canExpand ? (expanded ? "Hide account" : "Show which account is signed in") : "Your Claude plan")
+        .help(canExpand ? (expanded ? "Hide accounts" : "Show accounts and switch between them") : "Your Claude plan")
         .accessibilityLabel("\(plan) plan")
-        .accessibilityHint(canExpand ? (expanded ? "Hides the account" : "Shows which account is signed in") : "")
+        .accessibilityHint(canExpand ? (expanded ? "Hides accounts" : "Shows accounts and switches between them") : "")
     }
 }
 

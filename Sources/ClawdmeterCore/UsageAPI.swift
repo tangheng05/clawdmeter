@@ -5,14 +5,27 @@ import Foundation
 public enum UsageAPI {
     static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
-    public static func fetch(paths: ClaudePaths, account: String?, now: Date = .now) async -> RateLimits? {
-        guard let token = accessToken(paths: paths, now: now) else { return nil }
+    public enum Result: Equatable, Sendable {
+        case limits(RateLimits)
+        /// The login was refused, so it needs signing in again.
+        case signedOut
+        case unavailable
+    }
+
+    public static func fetch(paths: ClaudePaths, account: String?, now: Date = .now) async -> Result {
+        guard let token = accessToken(paths: paths, now: now) else { return .unavailable }
         var request = URLRequest(url: endpoint, timeoutInterval: 15)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
         guard let (data, response) = try? await URLSession.shared.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
-        return parse(data, account: account, now: now)
+              let status = (response as? HTTPURLResponse)?.statusCode else { return .unavailable }
+        return result(status: status, data: data, account: account, now: now)
+    }
+
+    static func result(status: Int, data: Data, account: String?, now: Date) -> Result {
+        if status == 401 { return .signedOut }
+        guard status == 200, let limits = parse(data, account: account, now: now) else { return .unavailable }
+        return .limits(limits)
     }
 
     static func parse(_ data: Data, account: String?, now: Date) -> RateLimits? {
@@ -22,10 +35,7 @@ public enum UsageAPI {
 
     /// Never refreshes an expired token: that would rotate Claude Code's login and sign it out.
     static func accessToken(paths: ClaudePaths, now: Date) -> String? {
-        // A custom config dir keeps its login under a different Keychain item.
-        guard paths.claudeDir.standardizedFileURL == FileManager.default.homeDirectoryForCurrentUser
-            .appending(path: ".claude").standardizedFileURL,
-            let data = keychainCredentials() else { return nil }
+        guard paths.isDefault, let data = keychainCredentials() else { return nil }
         return token(fromCredentials: data, now: now)
     }
 

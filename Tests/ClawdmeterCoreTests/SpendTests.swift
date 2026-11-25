@@ -27,13 +27,46 @@ import Testing
     }
 
     @Test func longestModelPrefixWins() {
-        #expect(ModelPrice.lookup("claude-opus-5-5")?.input == 4)
-        #expect(ModelPrice.lookup("claude-opus-5")?.input == 5)
-        #expect(ModelPrice.lookup("claude-fable-5-1")?.cacheRead == 0.25)
-        #expect(ModelPrice.lookup("claude-fable-5")?.cacheRead == 1)
-        #expect(ModelPrice.lookup("anthropic.claude-sonnet-4-6")?.input == 3)
+        #expect(ModelPrice.lookup("claude-opus-5-5")?.standard.input == 4)
+        #expect(ModelPrice.lookup("claude-opus-5")?.standard.input == 5)
+        #expect(ModelPrice.lookup("claude-fable-5-1")?.standard.cacheRead == 0.25)
+        #expect(ModelPrice.lookup("claude-fable-5")?.standard.cacheRead == 1)
+        #expect(ModelPrice.lookup("claude-fable-5-2")?.standard.input == 8)
+        #expect(ModelPrice.lookup("claude-sonnet-5-5")?.standard.cacheRead == 0.1)
+        #expect(ModelPrice.lookup("claude-sonnet-5")?.standard.cacheRead == 0.2)
+        #expect(ModelPrice.lookup("anthropic.claude-sonnet-4-6")?.standard.input == 3)
         #expect(ModelPrice.lookup("gpt-5") == nil)
         #expect(ModelPrice.lookup("<synthetic>") == nil)
+    }
+
+    @Test func aNewerVersionNeverBorrowsAnOlderPrice() {
+        let table = ModelPrice.builtIn.filter { !["claude-fable-5-2", "claude-haiku-5-5"].contains($0.key) }
+        #expect(ModelPrice.lookup("claude-fable-5-2", in: table) == nil)
+        #expect(ModelPrice.lookup("claude-fable-5", in: table)?.standard.cacheRead == 1)
+    }
+
+    @Test func dateAndProviderSuffixesStillMatch() {
+        #expect(ModelPrice.lookup("claude-opus-4-5-20251101")?.standard.input == 5)
+        #expect(ModelPrice.lookup("claude-opus-5-5[1m]")?.standard.input == 4)
+        #expect(ModelPrice.lookup("anthropic.claude-sonnet-4-6-v1:0")?.standard.input == 3)
+        #expect(ModelPrice.lookup("claude-opus-4-1@20250805")?.standard.input == 15)
+        #expect(ModelPrice.lookup("claude-opus-4-20250514")?.standard.input == 15)
+        #expect(ModelPrice.lookup("claude-sonnet-4-20250514")?.standard.input == 3)
+    }
+
+    @Test func publishedCacheWriteRatesAreUsed() {
+        let rates = Rates(input: 1, output: 0, cacheRead: 0, cacheWrite5m: 3, cacheWrite1h: 7)
+        let price = ModelPrice(standard: rates)
+        #expect(abs(price.cost(of: TokenUsage(cacheWrite5m: 1_000_000, cacheWrite1h: 1_000_000)) - 10) < 0.0001)
+    }
+
+    @Test func haikuLongPromptsPayTheHigherRate() {
+        let price = ModelPrice.lookup("claude-haiku-5-5")!
+        let short = TokenUsage(input: 10_000, output: 1_000_000, cacheRead: 90_000)
+        // 0.10×0.01 + 0.50 + 0.01×0.09
+        #expect(abs(price.cost(of: short) - 0.5019) < 0.000001)
+        let long = TokenUsage(input: 10_000, output: 1_000_000, cacheRead: 90_001)
+        #expect(abs(price.cost(of: long) - 5 * (0.001 + 0.5 + 0.00090001)) < 0.000001)
     }
 
     @Test func repeatedLinesForOneReplyCountOnce() throws {
@@ -130,6 +163,16 @@ import Testing
         let dir = try TempDir()
         try dir.write(line(id: "a", at: now, output: 1_000_000, speed: "fast") + "\n", to: "projects/p/s.jsonl")
         #expect(abs(SpendIndex(paths: dir.paths).refresh(now: now, calendar: calendar).today.cost - 40) < 0.0001)
+    }
+
+    @Test func fetchedPricesAreUsed() throws {
+        let dir = try TempDir()
+        try dir.write(line(id: "a", model: "claude-opus-9", at: now, output: 1_000_000) + "\n", to: "projects/p/s.jsonl")
+        let rates = Rates(input: 1, output: 7, cacheRead: 0.1, cacheWrite5m: 1.25, cacheWrite1h: 2)
+        try LivePrices.save(["claude-opus-9": ModelPrice(standard: rates)], paths: dir.paths, at: now)
+        let today = SpendIndex(paths: dir.paths).refresh(now: now, calendar: calendar).today
+        #expect(abs(today.cost - 7) < 0.0001)
+        #expect(today.unpricedTokens == 0)
     }
 
     @Test func olderLogsWithoutTheCacheBreakdownCountAsFiveMinuteWrites() throws {

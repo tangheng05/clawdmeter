@@ -20,6 +20,13 @@ final class AppModel {
     private(set) var accountOrganization: String?
     /// The signed-in account shown under the headline, after a click on the plan badge.
     var accountExpanded = false
+    private(set) var accountsSupported = false
+    private(set) var savedAccounts: [SavedLogin] = []
+    private(set) var activeAccountKey: String?
+    /// The account being switched to, or "add" while signing in.
+    private(set) var accountBusy: String?
+    /// Saved logins Anthropic refused, which need a fresh browser sign-in.
+    private(set) var needsSignIn: Set<String> = []
     /// True while the screen is being shared and usage should stay out of the menu bar.
     private(set) var screenShared = false
     /// Bumped when a limit window resets, so time-based views refresh.
@@ -105,6 +112,9 @@ final class AppModel {
     @ObservationIgnored private var accountFileModified: Date?
     @ObservationIgnored private lazy var spendIndex = SpendIndex(paths: paths)
     @ObservationIgnored private var spendRefreshing = false
+    @ObservationIgnored private lazy var switcher = AccountSwitcher(paths: paths)
+    @ObservationIgnored private var accountsRefreshed: Date?
+    @ObservationIgnored private var lastPriceAttempt: Date?
 
     init() {
         defaults.register(defaults: ["showCount": true, "showLimit": true, "orangeIcon": true,
@@ -201,14 +211,104 @@ final class AppModel {
         if let lastFetch, now.timeIntervalSince(lastFetch) < 60 { return }
         if let limits, now.timeIntervalSince(limits.updatedAt) < 60 { return }
         lastFetch = now
-        let paths = paths, account = account
+        // Credited to the account it was made for, even if a switch lands meanwhile.
+        let paths = paths, account = account, key = activeAccountKey
         Task { [weak self] in
             let result = await Task.detached(priority: .utility) {
                 await UsageAPI.fetch(paths: paths, account: account)
             }.value
-            guard let fetched = result else { return }
-            self?.fetchedLimits = fetched
-            self?.reload()
+            guard let self else { return }
+            switch result {
+            case .limits(let fetched):
+                if let key { needsSignIn.remove(key) }
+                fetchedLimits = fetched
+                reload()
+            case .signedOut:
+                if let key { needsSignIn.insert(key) }
+            case .unavailable:
+                break
+            }
+        }
+    }
+
+    // MARK: Accounts
+
+    func refreshAccounts(force: Bool = true) {
+        if !force, let last = accountsRefreshed, Date.now.timeIntervalSince(last) < 30 { return }
+        accountsRefreshed = .now
+        let switcher = switcher
+        Task { [weak self] in
+            let (supported, active, saved) = await Task.detached(priority: .utility) {
+                guard switcher.isSupported else { return (false, String?.none, [SavedLogin]()) }
+                _ = try? switcher.saveActive()
+                return (true, switcher.activeKey(), switcher.saved())
+            }.value
+            guard let self else { return }
+            if accountsSupported != supported { accountsSupported = supported }
+            if activeAccountKey != active { activeAccountKey = active }
+            if savedAccounts != saved { savedAccounts = saved }
+        }
+    }
+
+    func switchAccount(_ key: String) {
+        guard accountBusy == nil, key != activeAccountKey else { return }
+        accountBusy = key
+        let switcher = switcher
+        Task { [weak self] in
+            let result = await Task.detached(priority: .userInitiated) { () -> Result<AccountChange?, Error> in
+                Result { try switcher.switchTo(key) }
+            }.value
+            guard let self else { return }
+            accountBusy = nil
+            switch result {
+            case .failure(let error):
+                notifier.postMessage(title: "Couldn't switch accounts",
+                                     body: error.localizedDescription + " You're still on the same account.")
+                return
+            case .success(nil):
+                break
+            case .success(let change?):
+                // Blocks for a minute, so it gets its own thread.
+                Thread.detachNewThread { [weak self] in
+                    switcher.guardSwitch(change)
+                    DispatchQueue.main.async { self?.refreshAccounts() }
+                }
+            }
+            activeAccountKey = key
+            lastFetch = nil
+            reload()
+            refreshAccounts()
+        }
+    }
+
+    /// Pass a saved login to sign it in again; nil adds a new account.
+    func addAccount(_ login: SavedLogin? = nil) {
+        guard accountBusy == nil else { return }
+        accountBusy = login?.key ?? "add"
+        let switcher = switcher
+        Task { [weak self] in
+            _ = await Task.detached(priority: .utility) {
+                switcher.cancelGuards()
+                _ = try? switcher.saveActive()
+            }.value
+            let outcome = await LoginRunner.signIn(email: login?.email)
+            guard let self else { return }
+            accountBusy = nil
+            switch outcome {
+            case .signedIn:
+                if let key = login?.key { needsSignIn.remove(key) }
+                lastFetch = nil
+                refreshAccounts()
+            case .failed(let reason): notifier.postMessage(title: "Couldn't add the account", body: reason)
+            }
+        }
+    }
+
+    func forgetAccount(_ key: String) {
+        let switcher = switcher
+        Task { [weak self] in
+            await Task.detached(priority: .utility) { switcher.forget(key) }.value
+            self?.refreshAccounts()
         }
     }
 
@@ -229,9 +329,16 @@ final class AppModel {
     func refreshSpend() {
         guard !spendRefreshing else { return }
         spendRefreshing = true
-        let index = spendIndex
+        let index = spendIndex, paths = paths
+        // Failed fetches wait an hour, so being offline never holds up the numbers.
+        let fetchPrices = lastPriceAttempt.map { Date.now.timeIntervalSince($0) > 3600 } ?? true
+        if fetchPrices { lastPriceAttempt = .now }
         Task { [weak self] in
-            let summary = await Task.detached(priority: .utility) { index.refresh() }.value
+            var summary = await Task.detached(priority: .utility) { index.refresh() }.value
+            if let self, spend != summary { spend = summary }
+            if fetchPrices, await LivePrices.refreshIfDue(paths) {
+                summary = await Task.detached(priority: .utility) { index.refresh() }.value
+            }
             guard let self else { return }
             spendRefreshing = false
             if spend != summary { spend = summary }
@@ -259,6 +366,8 @@ final class AppModel {
         guard modified != accountFileModified || modified == nil else { return }
         accountFileModified = modified
         let snapshot = Account.read(paths)
+        // Claude Code rewrites the file every few seconds; only a new account needs an immediate look.
+        refreshAccounts(force: snapshot.account != account)
         cachedLimits = snapshot.cachedLimits
         if plan != snapshot.plan { plan = snapshot.plan }
         if accountEmail != snapshot.email { accountEmail = snapshot.email }

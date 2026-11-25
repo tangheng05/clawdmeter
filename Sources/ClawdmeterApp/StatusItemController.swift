@@ -107,7 +107,8 @@ final class StatusItemController {
 
     private func update() {
         _ = (model.installStatus, model.installError, model.updater.available, model.updater.status, model.spend,
-             model.accountExpanded)
+             model.accountExpanded, model.savedAccounts, model.accountsSupported, model.accountBusy,
+             model.needsSignIn, model.screenShared)
         let taken = !hotKey.register(model.shortcut)
         // Only write on change; every write re-triggers this observation.
         if model.shortcutTaken != taken { model.shortcutTaken = taken }
@@ -225,12 +226,28 @@ final class StatusItemController {
         menu.addItem(withTitle: "Open Clawdmeter", action: #selector(toggle), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
         menu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "").target = self
+        // Emails stay out of a shared screen, like everywhere else.
+        if model.accountsSupported, !model.screenShared, model.accountBusy == nil {
+            let others = model.savedAccounts.filter { $0.key != model.activeAccountKey }
+            if !others.isEmpty { menu.addItem(.separator()) }
+            for login in others {
+                let item = menu.addItem(withTitle: "Switch to \(login.email ?? "another account")",
+                                        action: #selector(switchAccount(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = login.key
+            }
+        }
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Clawdmeter", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         // Setting the menu only for this click keeps a left click opening the popover.
         item.menu = menu
         item.button?.performClick(nil)
         item.menu = nil
+    }
+
+    @objc private func switchAccount(_ sender: NSMenuItem) {
+        guard let key = sender.representedObject as? String else { return }
+        model.switchAccount(key)
     }
 
     @objc private func openSettings() {

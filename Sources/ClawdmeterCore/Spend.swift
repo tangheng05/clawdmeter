@@ -14,40 +14,97 @@ public struct TokenUsage: Equatable, Sendable {
     public var total: Int { input + output + cacheRead + cacheWrite5m + cacheWrite1h }
 }
 
-/// API prices in dollars per million tokens.
-public struct ModelPrice: Equatable, Sendable {
-    public let input: Double
-    public let output: Double
-    public let cacheRead: Double
+/// Dollars per million tokens.
+public struct Rates: Codable, Equatable, Sendable {
+    public var input, output, cacheRead, cacheWrite5m, cacheWrite1h: Double
+
+    public init(input: Double, output: Double, cacheRead: Double, cacheWrite5m: Double, cacheWrite1h: Double) {
+        self.input = input
+        self.output = output
+        self.cacheRead = cacheRead
+        self.cacheWrite5m = cacheWrite5m
+        self.cacheWrite1h = cacheWrite1h
+    }
+
+    /// The usual cache write rates: 1.25x input for 5 minutes, 2x for an hour.
+    static func standard(input: Double, output: Double, cacheRead: Double) -> Rates {
+        Rates(input: input, output: output, cacheRead: cacheRead, cacheWrite5m: input * 1.25, cacheWrite1h: input * 2)
+    }
+}
+
+public struct ModelPrice: Codable, Equatable, Sendable {
+    public var standard: Rates
+    /// Haiku 5.5 bills a whole request at these rates once its prompt, cache included, passes the threshold.
+    public var longPrompt: Rates?
+    public var longPromptThreshold: Int?
+
+    public init(standard: Rates, longPrompt: Rates? = nil, longPromptThreshold: Int? = nil) {
+        self.standard = standard
+        self.longPrompt = longPrompt
+        self.longPromptThreshold = longPromptThreshold
+    }
 
     public func cost(of usage: TokenUsage) -> Double {
-        let dollars = Double(usage.input) * input + Double(usage.output) * output + Double(usage.cacheRead) * cacheRead
-            + Double(usage.cacheWrite5m) * input * 1.25 + Double(usage.cacheWrite1h) * input * 2
+        let prompt = usage.input + usage.cacheRead + usage.cacheWrite5m + usage.cacheWrite1h
+        var rates = standard
+        if let longPrompt, let longPromptThreshold, prompt > longPromptThreshold { rates = longPrompt }
+        let dollars = Double(usage.input) * rates.input + Double(usage.output) * rates.output
+            + Double(usage.cacheRead) * rates.cacheRead
+            + Double(usage.cacheWrite5m) * rates.cacheWrite5m + Double(usage.cacheWrite1h) * rates.cacheWrite1h
         return dollars / 1_000_000
     }
 
-    /// Longest prefix first, so "claude-opus-5-5" never falls through to "claude-opus-5".
-    private static let table: [(prefix: String, price: ModelPrice)] = [
-        ("claude-fable-5-1", ModelPrice(input: 10, output: 50, cacheRead: 0.25)),
-        ("claude-mythos-5-1", ModelPrice(input: 10, output: 50, cacheRead: 0.25)),
-        ("claude-fable-5", ModelPrice(input: 10, output: 50, cacheRead: 1)),
-        ("claude-mythos-5", ModelPrice(input: 10, output: 50, cacheRead: 1)),
-        ("claude-opus-5-5", ModelPrice(input: 4, output: 20, cacheRead: 0.2)),
-        ("claude-opus-5", ModelPrice(input: 5, output: 25, cacheRead: 0.5)),
-        ("claude-opus-4-8", ModelPrice(input: 5, output: 25, cacheRead: 0.5)),
-        ("claude-opus-4-7", ModelPrice(input: 5, output: 25, cacheRead: 0.5)),
-        ("claude-opus-4-6", ModelPrice(input: 5, output: 25, cacheRead: 0.5)),
-        ("claude-sonnet-5-5", ModelPrice(input: 2, output: 10, cacheRead: 0.2)),
-        ("claude-sonnet-5", ModelPrice(input: 2, output: 10, cacheRead: 0.2)),
-        ("claude-sonnet-4-6", ModelPrice(input: 3, output: 15, cacheRead: 0.3)),
-        ("claude-haiku-4-5", ModelPrice(input: 1, output: 5, cacheRead: 0.1)),
-    ].sorted { $0.prefix.count > $1.prefix.count }
+    /// Used until the pricing page has been fetched, and for models it no longer lists.
+    public static let builtIn: [String: ModelPrice] = {
+        func price(_ input: Double, _ output: Double, _ cacheRead: Double) -> ModelPrice {
+            ModelPrice(standard: .standard(input: input, output: output, cacheRead: cacheRead))
+        }
+        return [
+            "claude-fable-5-2": price(8, 40, 0.2),
+            "claude-mythos-5-2": price(8, 40, 0.2),
+            "claude-fable-5-1": price(10, 50, 0.25),
+            "claude-mythos-5-1": price(10, 50, 0.25),
+            "claude-fable-5": price(10, 50, 1),
+            "claude-mythos-5": price(10, 50, 1),
+            "claude-opus-5-5": price(4, 20, 0.2),
+            "claude-opus-5": price(5, 25, 0.5),
+            "claude-opus-4-8": price(5, 25, 0.5),
+            "claude-opus-4-7": price(5, 25, 0.5),
+            "claude-opus-4-6": price(5, 25, 0.5),
+            "claude-opus-4-5": price(5, 25, 0.5),
+            "claude-opus-4-1": price(15, 75, 1.5),
+            "claude-opus-4": price(15, 75, 1.5),
+            "claude-sonnet-5-5": price(2, 10, 0.1),
+            "claude-sonnet-5": price(2, 10, 0.2),
+            "claude-sonnet-4-6": price(3, 15, 0.3),
+            "claude-sonnet-4-5": price(3, 15, 0.3),
+            "claude-sonnet-4": price(3, 15, 0.3),
+            "claude-haiku-5-5": ModelPrice(standard: .standard(input: 0.1, output: 0.5, cacheRead: 0.01),
+                                           longPrompt: .standard(input: 0.5, output: 2.5, cacheRead: 0.05),
+                                           longPromptThreshold: 100_000),
+            "claude-haiku-4-5": price(1, 5, 0.1),
+        ]
+    }()
 
-    /// Also matches provider-prefixed ids such as "anthropic.claude-sonnet-4-6".
     public static func lookup(_ model: String) -> ModelPrice? {
+        lookup(model, in: builtIn)
+    }
+
+    /// Matches provider prefixes and date or variant suffixes ("anthropic.…-v1:0", "…-20251101", "…[1m]"),
+    /// but never a newer version: "claude-fable-5" doesn't price "claude-fable-5-2".
+    public static func lookup(_ model: String, in table: [String: ModelPrice]) -> ModelPrice? {
         guard let start = model.range(of: "claude-") else { return nil }
         let id = model[start.lowerBound...]
-        return table.first { id.hasPrefix($0.prefix) }?.price
+        let key = table.keys.filter { id.hasPrefix($0) && isVariantSuffix(id.dropFirst($0.count)) }.max { $0.count < $1.count }
+        return key.flatMap { table[$0] }
+    }
+
+    private static func isVariantSuffix(_ rest: Substring) -> Bool {
+        if rest.isEmpty || rest.hasPrefix("@") || rest.hasPrefix("[") || rest.hasPrefix(":") || rest.hasPrefix("-v") {
+            return true
+        }
+        let date = rest.dropFirst().prefix(while: \.isNumber)
+        return rest.hasPrefix("-") && date.count == 8
     }
 }
 
@@ -83,13 +140,16 @@ public struct SpendSummary: Codable, Equatable, Sendable {
 /// What Claude Code's local logs would cost at API prices. Each refresh reads only what was
 /// appended since the last one.
 public final class SpendIndex: @unchecked Sendable {
+    /// Priced when summed rather than when read, so a price fetched later applies to every reply.
     private struct Reply {
         let date: Date
-        let total: DayTotal
+        var model: String?
+        let tokens: TokenUsage
+        let fast: Bool
 
         /// A reply is logged once per content block, and its output count can grow along the way.
         static func larger(_ a: Reply, _ b: Reply) -> Reply {
-            b.total.tokens > a.total.tokens ? b : a
+            b.tokens.total > a.tokens.total ? b : a
         }
     }
 
@@ -101,6 +161,8 @@ public final class SpendIndex: @unchecked Sendable {
     private let paths: ClaudePaths
     private let lock = NSLock()
     private var files: [String: FileState] = [:]
+    /// One shared copy of each model name, instead of one per reply.
+    private var modelNames: [String: String] = [:]
     private static let marker = Array(#""usage""#.utf8)
     private static let newline = UInt8(ascii: "\n")
     private static let bufferSize = 1 << 20
@@ -136,9 +198,19 @@ public final class SpendIndex: @unchecked Sendable {
         for state in files.values {
             replies.merge(state.replies, uniquingKeysWith: Reply.larger)
         }
+        let table = LivePrices.table(paths)
+        var prices: [String: ModelPrice?] = [:]
         var days: [Date: DayTotal] = [:]
         for reply in replies.values where reply.date >= monthStart {
-            days[calendar.startOfDay(for: reply.date), default: DayTotal()] += reply.total
+            let tokens = reply.tokens.total
+            var total = DayTotal(tokens: tokens, unpricedTokens: tokens)
+            if let model = reply.model {
+                if prices[model] == nil { prices[model] = ModelPrice.lookup(model, in: table) }
+                if let price = prices[model] ?? nil {
+                    total = DayTotal(tokens: tokens, cost: price.cost(of: reply.tokens) * (reply.fast ? 2 : 1))
+                }
+            }
+            days[calendar.startOfDay(for: reply.date), default: DayTotal()] += total
         }
         return SpendSummary(today: days[today] ?? DayTotal(), yesterday: days[yesterday] ?? DayTotal(),
                             last30: days.values.reduce(DayTotal(), +))
@@ -174,7 +246,9 @@ public final class SpendIndex: @unchecked Sendable {
             guard let lastNewline = buffer[..<filled].lastIndex(of: Self.newline) else { continue }
             autoreleasepool {
                 for line in buffer[...lastNewline].split(separator: Self.newline) where Self.mentionsUsage(line) {
-                    guard let (id, reply) = Self.parse(Data(line), decoder: decoder), reply.date >= cutoff else { continue }
+                    guard let (id, parsed) = Self.parse(Data(line), decoder: decoder), parsed.date >= cutoff else { continue }
+                    var reply = parsed
+                    reply.model = reply.model.map(intern)
                     state.replies[id] = state.replies[id].map { Reply.larger($0, reply) } ?? reply
                 }
             }
@@ -186,6 +260,12 @@ public final class SpendIndex: @unchecked Sendable {
         // Back to normal size after a line longer than the buffer.
         if buffer.count > Self.bufferSize { buffer = [UInt8](repeating: 0, count: Self.bufferSize) }
         files[file.path] = state
+    }
+
+    private func intern(_ name: String) -> String {
+        if let shared = modelNames[name] { return shared }
+        modelNames[name] = name
+        return name
     }
 
     /// Searches the bytes in place; `Data.range(of:)` copied every line first, tool output included.
@@ -238,14 +318,6 @@ public final class SpendIndex: @unchecked Sendable {
             tokens.cacheWrite5m = usage.cache_creation_input_tokens ?? 0
         }
         guard tokens.total > 0 else { return nil }
-
-        let total: DayTotal
-        if let price = log.message?.model.flatMap(ModelPrice.lookup) {
-            let fast = usage.speed == "fast"
-            total = DayTotal(tokens: tokens.total, cost: price.cost(of: tokens) * (fast ? 2 : 1))
-        } else {
-            total = DayTotal(tokens: tokens.total, unpricedTokens: tokens.total)
-        }
-        return (id, Reply(date: date, total: total))
+        return (id, Reply(date: date, model: log.message?.model, tokens: tokens, fast: usage.speed == "fast"))
     }
 }
